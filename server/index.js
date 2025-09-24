@@ -1,77 +1,117 @@
-const express = require('express');
-const session = require('express-session');
-const passport = require('passport');
-const DiscordStrategy = require('passport-discord').Strategy;
-const path = require('path');
-const dotenv = require('dotenv');
+import express from "express";
+import session from "express-session";
+import passport from "passport";
+import { Strategy as DiscordStrategy } from "passport-discord";
+import dotenv from "dotenv";
+import path from "path";
+import { fileURLToPath } from "url";
+
 dotenv.config();
 
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+
 const app = express();
-const PORT = process.env.PORT || 3000;
+const PORT = process.env.PORT || 10000;
 
-// Passport setup
-passport.serializeUser((user, done) => done(null, user));
-passport.deserializeUser((obj, done) => done(null, obj));
+// =========================
+// 🔑 Configuração da sessão
+// =========================
+app.use(
+  session({
+    secret: process.env.SESSION_SECRET || "makerzxluma",
+    resave: false,
+    saveUninitialized: false,
+  })
+);
 
-const scopes = ['identify', 'email'];
-passport.use(new DiscordStrategy({
-  clientID: process.env.DISCORD_CLIENT_ID,
-  clientSecret: process.env.DISCORD_CLIENT_SECRET,
-  callbackURL: process.env.DISCORD_CALLBACK_URL,
-  scope: scopes
-}, function(accessToken, refreshToken, profile, done) {
-  // profile contains user info
-  profile.accessToken = accessToken;
-  return done(null, profile);
-}));
-
-app.use(express.json());
-app.use(session({
-  secret: process.env.SESSION_SECRET || 'change_this',
-  resave: false,
-  saveUninitialized: false,
-  cookie: { maxAge: 1000 * 60 * 60 * 24 } // 1 day
-}));
 app.use(passport.initialize());
 app.use(passport.session());
 
-// Auth routes
-app.get('/auth/discord', passport.authenticate('discord'));
-app.get('/auth/discord/callback',
-  passport.authenticate('discord', { failureRedirect: '/' }),
+// =========================
+// 🔑 Estratégia do Discord
+// =========================
+passport.use(
+  new DiscordStrategy(
+    {
+      clientID: process.env.DISCORD_CLIENT_ID,
+      clientSecret: process.env.DISCORD_CLIENT_SECRET,
+      callbackURL:
+        process.env.DISCORD_CALLBACK_URL ||
+        "http://localhost:10000/auth/discord/callback",
+      scope: ["identify"],
+    },
+    function (accessToken, refreshToken, profile, done) {
+      return done(null, profile);
+    }
+  )
+);
+
+passport.serializeUser((user, done) => {
+  done(null, user);
+});
+passport.deserializeUser((obj, done) => {
+  done(null, obj);
+});
+
+// =========================
+// 🔑 Rotas de autenticação
+// =========================
+app.get(
+  "/auth/discord",
+  passport.authenticate("discord", { scope: ["identify"] })
+);
+
+app.get(
+  "/auth/discord/callback",
+  passport.authenticate("discord", { failureRedirect: "/" }),
   (req, res) => {
-    // Successful auth, redirect to client welcome route
-    res.redirect('/welcome');
-  });
+    res.redirect("/welcome");
+  }
+);
 
-app.get('/auth/logout', (req, res) => {
-  req.logout(() => {});
-  req.session.destroy(() => {
-    res.redirect('/');
-  });
+app.get("/welcome", (req, res) => {
+  if (!req.user) return res.redirect("/auth/discord");
+  const username = req.user.username;
+  const discriminator = req.user.discriminator;
+
+  res.send(`
+    <html>
+      <head>
+        <title>Bem-vindo</title>
+        <style>
+          body {
+            background: black;
+            color: white;
+            font-family: monospace;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            font-size: 2rem;
+          }
+        </style>
+      </head>
+      <body>
+        Bem vindo, ${username}#${discriminator}!
+      </body>
+    </html>
+  `);
 });
 
-// API route to get user data
-app.get('/api/user', (req, res) => {
-  if (!req.user) return res.json({ logged: false });
-  return res.json({
-    logged: true,
-    id: req.user.id,
-    username: req.user.username,
-    discriminator: req.user.discriminator,
-    avatar: req.user.avatar,
-    tag: `${req.user.username}#${req.user.discriminator}`
-  });
+// =========================
+// 🔑 Servindo React (build)
+// =========================
+app.use(express.static(path.join(__dirname, "../client/dist")));
+
+app.get("*", (req, res) => {
+  res.sendFile(path.join(__dirname, "../client/dist/index.html"));
 });
 
-// Serve client build (if exists)
-const clientBuildPath = path.join(__dirname, '..', 'client', 'dist');
-app.use(express.static(clientBuildPath));
-// Serve index.html for SPA routes
-app.get('*', (req, res) => {
-  res.sendFile(path.join(clientBuildPath, 'index.html'));
-});
-
+// =========================
+// 🔑 Start do servidor
+// =========================
 app.listen(PORT, () => {
-  console.log(`Server listening on port ${PORT}`);
+  console.log(`✅ Server listening on port ${PORT}`);
 });
+  
