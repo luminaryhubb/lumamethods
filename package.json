@@ -1,0 +1,10 @@
+{
+  "name": "lumamethods-fullstack",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": {
+    "install-all": "npm --prefix client install && npm --prefix server install",
+    "build-all": "npm --prefix client run build",
+    "start": "node server/index.js"
+  }
+}
