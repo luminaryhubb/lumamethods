@@ -1,2 +1,0 @@
-import React, {useEffect, useState} from 'react'
-export default function Pastes(){ const [pastes,setPastes]=useState([]); useEffect(()=>{ fetch('/api/admin/pastes').then(r=>r.json()).then(d=>setPastes(d.pastes)).catch(()=>{}) },[]); return (<div><h3>Pastes</h3><div style={{marginTop:8}}>{pastes.map(p=>(<div key={p.id} className='card' style={{marginBottom:8}}><div>{p.id} • views: {p.accessesCount}</div><div style={{opacity:0.8}}>{p.textPreview}</div></div>))}</div></div>) }
