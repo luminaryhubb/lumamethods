@@ -1,7 +1,7 @@
 import { BrowserRouter, Routes, Route } from "react-router-dom";
 import Landing from "./pages/Landing";
 import Shortner from "./pages/Shortner";
-import Builder from "./pages/Builder";
+import Builders from "./pages/Builders";  // Corrigido para Builders.jsx
 import Admin from "./pages/Admin";
 
 function App() {
@@ -10,7 +10,7 @@ function App() {
       <Routes>
         <Route path="/" element={<Landing />} />
         <Route path="/shortner" element={<Shortner />} />
-        <Route path="/builder" element={<Builder />} />
+        <Route path="/builder" element={<Builders />} />  {/* Alterado aqui */}
         <Route path="/admin" element={<Admin />} />
       </Routes>
     </BrowserRouter>
