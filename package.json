@@ -3,7 +3,7 @@
   "version": "1.0.0",
   "private": true,
   "scripts": {
-    "dev": "concurrently "npm run dev --prefix server" "npm run dev --prefix client"",
+    "dev": "concurrently \"npm run dev --prefix server\" \"npm run dev --prefix client\"",
     "start": "node server/index.js",
     "build": "npm run build --prefix client && npm run build --prefix server",
     "install": "npm install --prefix client && npm install --prefix server"
