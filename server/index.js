@@ -3,6 +3,8 @@ import session from "express-session";
 import cors from "cors";
 import path from "path";
 import dotenv from "dotenv";
+import { fileURLToPath } from "url";
+import { dirname } from "path";
 
 import authRoutes from "./routes/auth.js";
 import shortnerRoutes from "./routes/shortner.js";
@@ -17,22 +19,19 @@ const PORT = process.env.PORT || 10000;
 app.use(cors());
 app.use(express.json());
 
-// sessão
 app.use(session({
   secret: process.env.SESSION_SECRET || "changeme",
   resave: false,
   saveUninitialized: false
 }));
 
-// rotas
 app.use("/api/auth", authRoutes);
 app.use("/api/shortner", shortnerRoutes);
 app.use("/api/builder", builderRoutes);
 app.use("/api/admin", adminRoutes);
 
-// servir frontend buildado
 const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
+const __dirname = dirname(__filename);
 
 app.use(express.static(path.join(__dirname, "../client/dist")));
 app.get("*", (req, res) => {
