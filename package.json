@@ -1,17 +1,14 @@
 {
-  "name": "luma-client",
+  "name": "luma-methods",
   "version": "1.0.0",
+  "private": true,
   "scripts": {
-    "dev": "vite",
-    "build": "vite build",
-    "preview": "vite preview"
+    "dev": "concurrently \"npm run dev --prefix server\" \"npm run dev --prefix client\"",
+    "start": "node server/index.js",
+    "build": "npm run build --prefix client",
+    "install": "npm install --prefix client && npm install --prefix server"
   },
   "dependencies": {
-    "vite": "^5.0.0",
-    "react": "^18.2.0",
-    "react-dom": "^18.2.0"
-  },
-  "devDependencies": {
-    "vite": "^5.0.0"
+    "concurrently": "^7.0.0"
   }
 }
