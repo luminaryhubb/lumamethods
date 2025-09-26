@@ -7,7 +7,7 @@ const cors = require("cors");
 
 const app = express();
 
-// 🔹 CORS (IMPORTANTE: antes da sessão)
+// 🔹 CORS (antes da sessão)
 app.use(
   cors({
     origin: "https://lumamethods.onrender.com", // seu domínio
@@ -15,7 +15,7 @@ app.use(
   })
 );
 
-// 🔹 Sessão
+// 🔹 Sessão (MemoryStore)
 app.use(
   session({
     secret: process.env.SESSION_SECRET || "supersecret",
@@ -23,8 +23,8 @@ app.use(
     saveUninitialized: false,
     cookie: {
       httpOnly: true,
-      secure: true, // HTTPS obrigatório no Render
-      sameSite: "none",
+      secure: process.env.NODE_ENV === "production", // só true em produção
+      sameSite: process.env.NODE_ENV === "production" ? "none" : "lax",
       maxAge: 1000 * 60 * 60 * 24, // 1 dia
     },
   })
@@ -57,7 +57,7 @@ app.get(
   passport.authenticate("discord", { failureRedirect: "/" }),
   (req, res) => {
     console.log("✅ Usuário autenticado:", req.user);
-    res.redirect("/metodos.html"); // redireciona para página hub
+    res.redirect("/metodos.html"); // redireciona para hub
   }
 );
 
