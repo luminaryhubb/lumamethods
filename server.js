@@ -27,8 +27,7 @@ passport.use(
       scope: ["identify"],
     },
     (accessToken, refreshToken, profile, done) => {
-      // 🔹 Retorna dados do usuário + token
-      profile.accessToken = accessToken;
+      profile.accessToken = accessToken || null; // garante que não quebre
       return done(null, profile);
     }
   )
@@ -43,9 +42,20 @@ app.get(
   "/auth/discord/callback",
   passport.authenticate("discord", { failureRedirect: "/" }),
   (req, res) => {
-    // Envia token e dados do usuário via query string
-    const redirectURL = `/metodos.html?accessToken=${req.user.accessToken}&id=${req.user.id}&username=${req.user.username}&discriminator=${req.user.discriminator}&avatar=${req.user.avatar}`;
-    res.redirect(redirectURL);
+    try {
+      if (!req.user) throw new Error("Usuário não encontrado");
+      const u = req.user;
+      const redirectURL = `/metodos.html?` +
+        `accessToken=${u.accessToken || ""}` +
+        `&id=${u.id || ""}` +
+        `&username=${u.username || ""}` +
+        `&discriminator=${u.discriminator || ""}` +
+        `&avatar=${u.avatar || ""}`;
+      res.redirect(redirectURL);
+    } catch (err) {
+      console.error("Erro no callback do Discord:", err);
+      res.redirect("/"); // redireciona para home se houver erro
+    }
   }
 );
 
