@@ -26,8 +26,8 @@ app.get("/", (req, res) => {
 
 // Login → redireciona pro Discord
 app.get("/login", (req, res) => {
-  const redirectUri = encodeURIComponent(process.env.DISCORD_CALLBACK_URL);
   const clientId = process.env.DISCORD_CLIENT_ID;
+  const redirectUri = process.env.DISCORD_CALLBACK_URL; // SEM encodeURIComponent
 
   const discordAuthUrl =
     `https://discord.com/api/oauth2/authorize?client_id=${clientId}` +
