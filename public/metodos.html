@@ -21,7 +21,7 @@
         const user = await res.json();
         window.discordUser = user;
       } catch (err) {
-        window.location.href = '/'; // redireciona para home se não estiver logado
+        window.location.href = '/'; // volta para home se não estiver logado
       }
     }
     checkAuth();
