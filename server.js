@@ -85,9 +85,10 @@ app.get("/auth/logout", (req, res, next) => {
   });
 });
 
-// 🔹 Servindo arquivos estáticos (HTML, CSS, JS)
+// 🔹 Servindo arquivos estáticos da pasta "public"
 app.use(express.static(path.join(__dirname, "public")));
 
+// 🔹 Rota coringa para SPA ou fallback
 app.get("*", (req, res) => {
   res.sendFile(path.join(__dirname, "public", "index.html"));
 });
