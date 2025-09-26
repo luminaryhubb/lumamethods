@@ -7,15 +7,15 @@ const cors = require("cors");
 
 const app = express();
 
-// 🔹 Configurar CORS para permitir cookies da sessão
+// 🔹 CORS (IMPORTANTE: antes da sessão)
 app.use(
   cors({
-    origin: "https://lumamethods.onrender.com", // seu domínio no Render
+    origin: "https://lumamethods.onrender.com", // seu domínio
     credentials: true,
   })
 );
 
-// 🔹 Configurar sessão com cookies válidos em HTTPS
+// 🔹 Sessão
 app.use(
   session({
     secret: process.env.SESSION_SECRET || "supersecret",
@@ -23,8 +23,8 @@ app.use(
     saveUninitialized: false,
     cookie: {
       httpOnly: true,
-      secure: true, // Render usa HTTPS
-      sameSite: "none", // 🔥 sem isso o cookie some
+      secure: true, // HTTPS obrigatório no Render
+      sameSite: "none",
       maxAge: 1000 * 60 * 60 * 24, // 1 dia
     },
   })
@@ -33,14 +33,9 @@ app.use(
 app.use(passport.initialize());
 app.use(passport.session());
 
-// 🔹 Configuração do Passport com Discord
-passport.serializeUser((user, done) => {
-  done(null, user);
-});
-
-passport.deserializeUser((obj, done) => {
-  done(null, obj);
-});
+// 🔹 Passport Discord
+passport.serializeUser((user, done) => done(null, user));
+passport.deserializeUser((obj, done) => done(null, obj));
 
 passport.use(
   new Strategy(
@@ -50,9 +45,7 @@ passport.use(
       callbackURL: "https://lumamethods.onrender.com/auth/discord/callback",
       scope: ["identify"],
     },
-    (accessToken, refreshToken, profile, done) => {
-      return done(null, profile);
-    }
+    (accessToken, refreshToken, profile, done) => done(null, profile)
   )
 );
 
@@ -64,7 +57,7 @@ app.get(
   passport.authenticate("discord", { failureRedirect: "/" }),
   (req, res) => {
     console.log("✅ Usuário autenticado:", req.user);
-    res.redirect("/metodos.html");
+    res.redirect("/metodos.html"); // redireciona para página hub
   }
 );
 
@@ -85,10 +78,10 @@ app.get("/auth/logout", (req, res, next) => {
   });
 });
 
-// 🔹 Servindo arquivos estáticos da pasta "public"
+// 🔹 Servir arquivos estáticos da pasta "public"
 app.use(express.static(path.join(__dirname, "public")));
 
-// 🔹 Rota coringa para SPA ou fallback
+// 🔹 Rota coringa
 app.get("*", (req, res) => {
   res.sendFile(path.join(__dirname, "public", "index.html"));
 });
