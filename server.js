@@ -1,92 +1,94 @@
 // server.js
+require("dotenv").config();
 const express = require("express");
 const session = require("express-session");
-const fetch = require("node-fetch");
+const axios = require("axios");
 const path = require("path");
-require("dotenv").config();
 
 const app = express();
-const PORT = process.env.PORT || 3000;
 
-// Sessão
-app.use(session({
-  secret: process.env.SESSION_SECRET || "secret",
-  resave: false,
-  saveUninitialized: false,
-  cookie: { secure: false }
-}));
+// Configuração da sessão
+app.use(
+  session({
+    secret: process.env.SESSION_SECRET || "supersecret",
+    resave: false,
+    saveUninitialized: false,
+  })
+);
 
-// Servir arquivos estáticos
+// Servir arquivos estáticos da pasta public
 app.use(express.static(path.join(__dirname, "public")));
 
-// Página inicial
-app.get("/", (req, res) => {
-  res.sendFile(path.join(__dirname, "public", "index.html"));
-});
-
-// Login → redireciona pro Discord
+// Login → Redireciona pro Discord
 app.get("/login", (req, res) => {
-  const clientId = process.env.DISCORD_CLIENT_ID;
-  const redirectUri = process.env.DISCORD_CALLBACK_URL; // SEM encodeURIComponent
-
-  const discordAuthUrl =
-    `https://discord.com/api/oauth2/authorize?client_id=${clientId}` +
-    `&redirect_uri=${redirectUri}` +
-    `&response_type=code&scope=identify%20email`;
-
-  res.redirect(discordAuthUrl);
+  const authorizeUrl = `https://discord.com/api/oauth2/authorize?client_id=${
+    process.env.DISCORD_CLIENT_ID
+  }&redirect_uri=${encodeURIComponent(
+    process.env.DISCORD_CALLBACK_URL
+  )}&response_type=code&scope=identify`;
+  res.redirect(authorizeUrl);
 });
 
 // Callback do Discord
-app.get("/callback", async (req, res) => {
+app.get("/auth/discord/callback", async (req, res) => {
   const code = req.query.code;
-  if (!code) return res.redirect("/");
+  if (!code) return res.send("Código de autorização não encontrado.");
 
   try {
-    const params = new URLSearchParams();
-    params.append("client_id", process.env.DISCORD_CLIENT_ID);
-    params.append("client_secret", process.env.DISCORD_CLIENT_SECRET);
-    params.append("grant_type", "authorization_code");
-    params.append("code", code);
-    params.append("redirect_uri", process.env.DISCORD_CALLBACK_URL);
+    // Trocar o código por um token
+    const tokenResponse = await axios.post(
+      "https://discord.com/api/oauth2/token",
+      new URLSearchParams({
+        client_id: process.env.DISCORD_CLIENT_ID,
+        client_secret: process.env.DISCORD_CLIENT_SECRET,
+        grant_type: "authorization_code",
+        code,
+        redirect_uri: process.env.DISCORD_CALLBACK_URL,
+        scope: "identify",
+      }),
+      {
+        headers: { "Content-Type": "application/x-www-form-urlencoded" },
+      }
+    );
 
-    const tokenRes = await fetch("https://discord.com/api/oauth2/token", {
-      method: "POST",
-      headers: { "Content-Type": "application/x-www-form-urlencoded" },
-      body: params
+    const accessToken = tokenResponse.data.access_token;
+
+    // Pegar dados do usuário
+    const userResponse = await axios.get("https://discord.com/api/users/@me", {
+      headers: { Authorization: `Bearer ${accessToken}` },
     });
 
-    const tokenData = await tokenRes.json();
-    if (!tokenData.access_token) {
-      console.error("Erro ao pegar token:", tokenData);
-      return res.redirect("/");
-    }
+    // Salvar usuário na sessão
+    req.session.user = userResponse.data;
 
-    const userRes = await fetch("https://discord.com/api/users/@me", {
-      headers: { Authorization: `Bearer ${tokenData.access_token}` }
-    });
-    const userData = await userRes.json();
-
-    req.session.user = userData;
+    // Redirecionar para métodos
     res.redirect("/metodos.html");
   } catch (err) {
-    console.error("Erro no callback:", err);
-    res.redirect("/");
+    console.error("Erro no callback:", err.response?.data || err.message);
+    res.status(500).send("Erro na autenticação com Discord.");
   }
 });
 
-// Middleware de proteção
-function authRequired(req, res, next) {
-  if (!req.session.user) return res.redirect("/");
-  next();
+// Middleware para proteger rotas
+function checkAuth(req, res, next) {
+  if (req.session.user) return next();
+  return res.redirect("/");
 }
 
-// API → retorna usuário logado
-app.get("/api/user", authRequired, (req, res) => {
-  res.json(req.session.user);
+// Exemplo de rota protegida
+app.get("/metodos.html", checkAuth, (req, res) => {
+  res.sendFile(path.join(__dirname, "public", "metodos.html"));
 });
 
-// Start
-app.listen(PORT, () => {
-  console.log(`Servidor rodando em http://localhost:${PORT}`);
+// Logout
+app.get("/logout", (req, res) => {
+  req.session.destroy(() => {
+    res.redirect("/");
+  });
 });
+
+// Start server
+const PORT = process.env.PORT || 3000;
+app.listen(PORT, () =>
+  console.log(`🚀 Server rodando em http://localhost:${PORT}`)
+);
