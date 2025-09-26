@@ -1,17 +1,26 @@
 {
   "name": "luma-methods",
   "version": "1.0.0",
+  "description": "Servidor Luma Methods com Discord OAuth2",
   "main": "server.js",
   "scripts": {
     "start": "node server.js"
   },
   "dependencies": {
     "axios": "^1.7.2",
+    "cookie-parser": "^1.4.6",
     "cors": "^2.8.5",
-    "dotenv": "^16.3.1",
-    "express": "^4.19.2",
-    "express-session": "^1.17.3",
-    "passport": "^0.7.0",
-    "passport-discord": "^0.1.4"
-  }
+    "express": "^4.19.2"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "keywords": [
+    "discord",
+    "oauth2",
+    "express",
+    "luma-methods"
+  ],
+  "author": "Luma Methods",
+  "license": "MIT"
 }
