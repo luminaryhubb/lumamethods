@@ -1,0 +1,21 @@
+<!doctype html>
+<html lang="pt-BR">
+<head><meta charset="utf-8"/><meta name="viewport" content="width=device-width,initial-scale=1"/><title>Methods - Luma</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<script src="https://unpkg.com/react@18/umd/react.development.js"></script>
+<script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
+<script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+</head>
+<body class="bg-black overflow-hidden">
+  <div id="root"></div>
+  <script type="text/babel">
+    const { useEffect } = React;
+    function App(){
+      const [user,setUser]=React.useState(null);
+      useEffect(()=>{ fetch('/api/user',{credentials:'include'}).then(r=>{ if(!r.ok) return window.location.href='/'; return r.json() }).then(j=>setUser(j)).catch(()=>window.location.href='/'); },[]);
+      return (<div className="relative w-full h-screen overflow-hidden"><canvas id="bg" className="fixed top-0 left-0 w-full h-full z-0"></canvas><div className="relative z-10 flex flex-col items-center justify-center h-full px-6"><img src="/admin_assets/LM.gif" className="w-40 h-40 rounded-lg mb-4"/><h2 className="text-2xl text-white">Bem-vindo(a), <span className="text-purple-400">{user?user.username:'...'}</span></h2><div className="mt-6 space-x-4"><a href="/builder.html"><button className="px-6 py-3 rounded-full bg-purple-600">Luma Builder</button></a><a href="/shortner.html"><button className="px-6 py-3 rounded-full bg-purple-600">Luma Shortner</button></a></div>{user && user.role==='admin' && <div className="mt-4"><a href="/admin"><button className="px-6 py-3 rounded-full bg-purple-600">Admin</button></a></div>}</div></div>);
+    }
+    ReactDOM.createRoot(document.getElementById('root')).render(<App/>);
+  </script>
+</body>
+</html>

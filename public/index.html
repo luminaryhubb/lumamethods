@@ -1,0 +1,26 @@
+<!doctype html>
+<html lang="pt-BR">
+<head><meta charset="utf-8"/><meta name="viewport" content="width=device-width,initial-scale=1"/><title>Luma Methods</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<script src="https://unpkg.com/react@18/umd/react.development.js"></script>
+<script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
+<script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+</head>
+<body class="bg-black overflow-hidden">
+  <div id="root"></div>
+  <script type="text/babel">
+    const { useRef, useEffect, useState } = React;
+    const LetterGlitch = ({glitchColors=['#fff'], glitchSpeed=50, characters='ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789'})=>{
+      const ref = useRef(null);
+      const [size,setSize] = useState({w:0,h:0});
+      useEffect(()=>{ const u=()=>setSize({w:window.innerWidth,h:window.innerHeight}); u(); window.addEventListener('resize',u); return ()=>window.removeEventListener('resize',u); },[]);
+      useEffect(()=>{ const c=ref.current; if(!c) return; const ctx=c.getContext('2d'); c.width=size.w; c.height=size.h; const font=14; const cols=Math.floor(size.w/font); const drops=Array(cols).fill(1); const chars=characters.split(''); const draw=()=>{ ctx.fillStyle='rgba(0,0,0,0.05)'; ctx.fillRect(0,0,c.width,c.height); ctx.fillStyle=glitchColors[0]; ctx.font=font+'px monospace'; for(let i=0;i<cols;i++){ const txt=chars[Math.floor(Math.random()*chars.length)]; ctx.fillText(txt,i*font,drops[i]*font); if(drops[i]*font>c.height && Math.random()>0.975) drops[i]=0; drops[i]++; } }; const it=setInterval(draw,glitchSpeed); return ()=>clearInterval(it); },[size]); return <canvas ref={ref} className="fixed top-0 left-0 w-full h-full z-0" />; };
+
+    const App=()=>{
+      return (<div className="relative w-full h-screen overflow-hidden"><LetterGlitch/><div className="relative z-10 flex flex-col items-center justify-center h-full px-6"><h1 className="text-6xl font-mono text-white mb-6">LUMA METHODS</h1><a href="/auth/discord"><button className="px-6 py-3 rounded-full bg-purple-600">Login com Discord</button></a></div></div>);
+    };
+
+    ReactDOM.createRoot(document.getElementById('root')).render(<App/>);
+  </script>
+</body>
+</html>
