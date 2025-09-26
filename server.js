@@ -13,29 +13,36 @@ app.use(
     secret: process.env.SESSION_SECRET || "supersecret",
     resave: false,
     saveUninitialized: false,
+    cookie: {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === "production", // importante no Render (https)
+      sameSite: "lax", // ajuda a manter o cookie no OAuth
+    },
   })
 );
 
 // Servir arquivos estáticos da pasta public
 app.use(express.static(path.join(__dirname, "public")));
 
-// Login → Redireciona pro Discord
+// Rota de login → redireciona para o Discord
 app.get("/login", (req, res) => {
   const authorizeUrl = `https://discord.com/api/oauth2/authorize?client_id=${
     process.env.DISCORD_CLIENT_ID
   }&redirect_uri=${encodeURIComponent(
     process.env.DISCORD_CALLBACK_URL
   )}&response_type=code&scope=identify`;
+
+  console.log("🔗 Redirecionando para:", authorizeUrl);
   res.redirect(authorizeUrl);
 });
 
 // Callback do Discord
 app.get("/auth/discord/callback", async (req, res) => {
   const code = req.query.code;
-  if (!code) return res.send("Código de autorização não encontrado.");
+  if (!code) return res.send("❌ Código de autorização não encontrado.");
 
   try {
-    // Trocar o código por um token
+    // Trocar código por token
     const tokenResponse = await axios.post(
       "https://discord.com/api/oauth2/token",
       new URLSearchParams({
@@ -60,17 +67,19 @@ app.get("/auth/discord/callback", async (req, res) => {
 
     // Salvar usuário na sessão
     req.session.user = userResponse.data;
+    console.log("✅ Usuário autenticado:", req.session.user);
 
     // Redirecionar para métodos
     res.redirect("/metodos.html");
   } catch (err) {
-    console.error("Erro no callback:", err.response?.data || err.message);
+    console.error("❌ Erro no callback:", err.response?.data || err.message);
     res.status(500).send("Erro na autenticação com Discord.");
   }
 });
 
 // Middleware para proteger rotas
 function checkAuth(req, res, next) {
+  console.log("🔎 Sessão atual:", req.session.user);
   if (req.session.user) return next();
   return res.redirect("/");
 }
@@ -83,6 +92,7 @@ app.get("/metodos.html", checkAuth, (req, res) => {
 // Logout
 app.get("/logout", (req, res) => {
   req.session.destroy(() => {
+    console.log("👋 Sessão destruída");
     res.redirect("/");
   });
 });
