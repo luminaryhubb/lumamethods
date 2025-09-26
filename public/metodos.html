@@ -6,8 +6,6 @@
     <title>Luma Methods - Dashboard</title>
     <link rel="icon" type="image/x-icon" href="/static/favicon.ico">
     <script src="https://cdn.tailwindcss.com"></script>
-    <script src="https://cdn.jsdelivr.net/npm/feather-icons/dist/feather.min.js"></script>
-    <script src="https://unpkg.com/feather-icons"></script>
     <script src="https://unpkg.com/react@18/umd/react.development.js"></script>
     <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
     <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
@@ -16,13 +14,14 @@
     <div id="root"></div>
 
     <script>
-        // 🔹 Checa autenticação do usuário
+        // Função para checar autenticação
         async function checkAuth() {
             try {
                 const res = await fetch('/api/user', { credentials: 'include' });
                 if (!res.ok) throw new Error('Não autorizado');
-                window.discordUser = await res.json();
-            } catch (err) {
+                const user = await res.json();
+                window.discordUser = user;
+            } catch {
                 window.location.href = '/';
             }
         }
@@ -30,58 +29,8 @@
     </script>
 
     <script type="text/babel">
-        const { useState, useEffect, useRef } = React;
+        const { useState, useEffect } = React;
 
-        // LetterGlitch Component
-        const LetterGlitch = ({ glitchColors = ['#FFFFFF'], glitchSpeed = 50, centerVignette = false, outerVignette = true, smooth = true, characters = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ!@#$&*()-_+=/[]{};:<>.,0123456789' }) => {
-            const canvasRef = useRef(null);
-            const [dimensions, setDimensions] = useState({ width: 0, height: 0 });
-
-            useEffect(() => {
-                const updateDimensions = () => setDimensions({ width: window.innerWidth, height: window.innerHeight });
-                updateDimensions();
-                window.addEventListener('resize', updateDimensions);
-                return () => window.removeEventListener('resize', updateDimensions);
-            }, []);
-
-            useEffect(() => {
-                if (!canvasRef.current || dimensions.width === 0) return;
-                const canvas = canvasRef.current;
-                const ctx = canvas.getContext('2d');
-                canvas.width = dimensions.width;
-                canvas.height = dimensions.height;
-
-                const chars = characters.split('');
-                const fontSize = 14;
-                const columns = Math.floor(dimensions.width / fontSize);
-                const drops = Array(columns).fill(1);
-
-                const draw = () => {
-                    ctx.fillStyle = 'rgba(0,0,0,0.05)';
-                    ctx.fillRect(0, 0, dimensions.width, dimensions.height);
-                    ctx.fillStyle = glitchColors[0];
-                    ctx.font = `${fontSize}px monospace`;
-
-                    for (let i = 0; i < drops.length; i++) {
-                        const text = chars[Math.floor(Math.random() * chars.length)];
-                        ctx.fillText(text, i * fontSize, drops[i] * fontSize);
-                        if (drops[i] * fontSize > dimensions.height && Math.random() > 0.975) drops[i] = 0;
-                        drops[i]++;
-                    }
-                };
-
-                const interval = setInterval(draw, glitchSpeed);
-                return () => clearInterval(interval);
-            }, [dimensions, glitchColors, glitchSpeed, characters]);
-
-            return React.createElement('canvas', {
-                ref: canvasRef,
-                className: `fixed top-0 left-0 w-full h-full z-0 ${smooth ? '' : 'pointer-events-none'}`,
-                style: { opacity: outerVignette ? 0.7 : 1, filter: centerVignette ? 'brightness(0.8) contrast(1.2)' : 'none' }
-            });
-        };
-
-        // Main App Component
         const App = () => {
             const [user, setUser] = useState(null);
 
@@ -91,24 +40,43 @@
                         setUser(window.discordUser);
                         clearInterval(interval);
                     }
-                }, 100);
+                }, 200);
             }, []);
 
-            if (!user) return React.createElement('div', { className: 'text-white flex h-screen items-center justify-center' }, 'Carregando...');
+            if (!user) {
+                return React.createElement('div', 
+                    { className: 'text-white flex h-screen items-center justify-center' }, 
+                    'Carregando...'
+                );
+            }
 
-            return React.createElement('div', { className: 'relative w-full h-screen overflow-hidden' },
-                React.createElement(LetterGlitch, { glitchColors: ['#FFFFFF'], glitchSpeed: 50 }),
-                React.createElement('div', { className: 'relative z-10 flex flex-col items-center justify-center h-full px-6 space-y-6' },
-                    React.createElement('img', {
-                        src: 'https://media.discordapp.net/attachments/1420450111074603018/1420851406956662884/standard_10.gif',
-                        className: 'w-32 h-32 mb-4 rounded-lg',
-                        alt: 'Luma Methods'
-                    }),
-                    React.createElement('h2', { className: 'text-white text-2xl font-bold' }, `Bem-vindo(a), ${user.username}`),
-                    React.createElement('div', { className: 'flex flex-col space-y-4' },
-                        React.createElement('button', { className: 'bg-purple-600 text-white px-8 py-4 rounded-full font-semibold text-lg transition-all duration-300 hover:bg-purple-500 hover:scale-105 transform shadow-2xl' }, 'Luma Rebuilder'),
-                        React.createElement('button', { className: 'bg-purple-600 text-white px-8 py-4 rounded-full font-semibold text-lg transition-all duration-300 hover:bg-purple-500 hover:scale-105 transform shadow-2xl' }, 'Luma Shortner')
-                    )
+            // IDs que têm acesso ao botão admin
+            const adminIDs = [
+                '1411328138931077142', 
+                '1066509829025300560', 
+                '1420447434362060917'
+            ];
+
+            return React.createElement('div', 
+                { className: 'flex flex-col items-center justify-center h-screen text-white space-y-6' },
+                React.createElement('img', {
+                    src: 'https://raw.githubusercontent.com/luminaryhubb/lumamethods/main/LM.gif',
+                    className: 'w-32 h-32 mb-4 rounded-lg',
+                    alt: 'Luma Methods'
+                }),
+                React.createElement('h2', {
+                    className: 'text-2xl font-bold text-purple-500'
+                }, `Bem-vindo(a), ${user.username}`),
+                React.createElement('div', { className: 'flex flex-col space-y-4 mt-4' },
+                    React.createElement('button', {
+                        className: 'bg-purple-600 text-white px-8 py-4 rounded-full font-semibold text-lg transition-all duration-300 hover:bg-purple-500 hover:scale-105 transform shadow-2xl'
+                    }, 'Luma Rebuilder'),
+                    React.createElement('button', {
+                        className: 'bg-purple-600 text-white px-8 py-4 rounded-full font-semibold text-lg transition-all duration-300 hover:bg-purple-500 hover:scale-105 transform shadow-2xl'
+                    }, 'Luma Shortner'),
+                    adminIDs.includes(user.id) && React.createElement('button', {
+                        className: 'bg-red-600 text-white px-8 py-4 rounded-full font-semibold text-lg transition-all duration-300 hover:bg-red-500 hover:scale-105 transform shadow-2xl'
+                    }, 'Admin')
                 )
             );
         };
@@ -116,15 +84,5 @@
         const root = ReactDOM.createRoot(document.getElementById('root'));
         root.render(React.createElement(App));
     </script>
-
-    <script>
-        feather.replace();
-    </script>
-
-    <style>
-        @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;700;800&display=swap');
-        body { font-family: 'JetBrains Mono', monospace; margin:0; padding:0; }
-        canvas { display:block; }
-    </style>
 </body>
 </html>
