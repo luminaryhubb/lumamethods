@@ -1,4 +1,4 @@
-// server.js (corrigido)
+// server.js (corrigido para Render + Discord OAuth2)
 require("dotenv").config();
 const express = require("express");
 const session = require("express-session");
@@ -7,8 +7,7 @@ const path = require("path");
 
 const app = express();
 
-// IMPORTANTE quando o app estiver por trás de um proxy (ex: Render, Heroku)
-// permite que o express-session trate corretamente cookies 'secure'
+// Render usa proxy HTTPS → precisamos avisar o Express
 app.set("trust proxy", 1);
 
 // Configuração da sessão
@@ -19,9 +18,8 @@ app.use(
     saveUninitialized: false,
     cookie: {
       httpOnly: true,
-      // Em production roda true (HTTPS). Com 'trust proxy' definido, o express sabe que está atrás de proxy HTTPS.
-      secure: process.env.NODE_ENV === "production",
-      sameSite: "lax", // ajuda a manter o cookie no OAuth
+      secure: true,     // Render sempre usa HTTPS em produção
+      sameSite: "none", // necessário para redirecionamento do Discord
     },
   })
 );
@@ -29,7 +27,7 @@ app.use(
 // Servir arquivos estáticos da pasta public
 app.use(express.static(path.join(__dirname, "public")));
 
-// Rota de login → redireciona para o Discord
+// Rota de login → Discord
 app.get("/login", (req, res) => {
   const authorizeUrl = `https://discord.com/api/oauth2/authorize?client_id=${
     process.env.DISCORD_CLIENT_ID
@@ -73,13 +71,12 @@ app.get("/auth/discord/callback", async (req, res) => {
     // Salvar usuário na sessão
     req.session.user = userResponse.data;
     console.log("✅ Usuário autenticado:", req.session.user);
-    // opcional: forçar salvar sessão antes de redirecionar
+
+    // Garante que a sessão é persistida antes do redirect
     req.session.save(err => {
       if (err) console.error("Erro ao salvar sessão:", err);
-      // Redirecionar para métodos
       res.redirect("/metodos.html");
     });
-
   } catch (err) {
     console.error("❌ Erro no callback:", err.response?.data || err.message);
     res.status(500).send("Erro na autenticação com Discord.");
@@ -93,7 +90,7 @@ function checkAuth(req, res, next) {
   return res.redirect("/");
 }
 
-// Exemplo de rota protegida
+// Rota protegida
 app.get("/metodos.html", checkAuth, (req, res) => {
   res.sendFile(path.join(__dirname, "public", "metodos.html"));
 });
