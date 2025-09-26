@@ -86,10 +86,10 @@ app.get("/auth/logout", (req, res, next) => {
 });
 
 // 🔹 Servindo arquivos estáticos (HTML, CSS, JS)
-app.use(express.static(path.join(__dirname, "client")));
+app.use(express.static(path.join(__dirname, "public")));
 
 app.get("*", (req, res) => {
-  res.sendFile(path.join(__dirname, "client", "index.html"));
+  res.sendFile(path.join(__dirname, "public", "index.html"));
 });
 
 // 🔹 Iniciar servidor
