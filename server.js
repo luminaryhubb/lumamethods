@@ -1,6 +1,5 @@
 const express = require("express");
-const passport = require("passport");
-const Strategy = require("passport-discord").Strategy;
+const axios = require("axios");
 const path = require("path");
 const cors = require("cors");
 
@@ -12,38 +11,51 @@ app.use(cors({
   credentials: true,
 }));
 
-// 🔹 Passport sem session
-passport.serializeUser((user, done) => done(null, user));
-passport.deserializeUser((obj, done) => done(null, obj));
+// 🔹 Variáveis do Discord (certifique-se de ter no .env)
+const CLIENT_ID = process.env.DISCORD_CLIENT_ID;
+const CLIENT_SECRET = process.env.DISCORD_CLIENT_SECRET;
+const REDIRECT_URI = "https://lumamethods.onrender.com/auth/discord/callback";
 
-passport.use(new Strategy({
-    clientID: process.env.DISCORD_CLIENT_ID,
-    clientSecret: process.env.DISCORD_CLIENT_SECRET,
-    callbackURL: "https://lumamethods.onrender.com/auth/discord/callback",
-    scope: ["identify"],
-  },
-  (accessToken, refreshToken, profile, done) => {
-    profile.accessToken = accessToken;
-    return done(null, profile);
-  }
-));
+// 🔹 Inicia login
+app.get("/auth/discord", (req, res) => {
+  const url = `https://discord.com/api/oauth2/authorize?client_id=${CLIENT_ID}&redirect_uri=${encodeURIComponent(REDIRECT_URI)}&response_type=code&scope=identify`;
+  res.redirect(url);
+});
 
-app.use(passport.initialize()); // ❌ SEM passport.session()
+// 🔹 Callback do Discord
+app.get("/auth/discord/callback", async (req, res) => {
+  const code = req.query.code;
+  if (!code) return res.redirect("/");
 
-// 🔹 Login
-app.get("/auth/discord", passport.authenticate("discord"));
+  try {
+    // Pega token do Discord
+    const tokenRes = await axios.post("https://discord.com/api/oauth2/token", new URLSearchParams({
+      client_id: CLIENT_ID,
+      client_secret: CLIENT_SECRET,
+      grant_type: "authorization_code",
+      code: code,
+      redirect_uri: REDIRECT_URI,
+    }), { headers: { "Content-Type": "application/x-www-form-urlencoded" }});
 
-// 🔹 Callback
-app.get("/auth/discord/callback",
-  passport.authenticate("discord", { failureRedirect: "/" }),
-  (req, res) => {
-    if (!req.user) return res.redirect("/");
-    const u = req.user;
+    const accessToken = tokenRes.data.access_token;
+
+    // Pega informações do usuário
+    const userRes = await axios.get("https://discord.com/api/users/@me", {
+      headers: { Authorization: `Bearer ${accessToken}` }
+    });
+
+    const u = userRes.data;
+
+    // Redireciona para metodos.html com query string
     const redirectURL = `/metodos.html?` +
       `id=${u.id}&username=${u.username}&discriminator=${u.discriminator}&avatar=${u.avatar}`;
     res.redirect(redirectURL);
+
+  } catch (err) {
+    console.error(err);
+    res.redirect("/");
   }
-);
+});
 
 // 🔹 Servir arquivos estáticos
 app.use(express.static(path.join(__dirname, "public")));
