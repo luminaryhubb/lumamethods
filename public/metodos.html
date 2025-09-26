@@ -13,16 +13,15 @@
   <div id="root"></div>
 
   <script>
+    // 🔹 Checar autenticação
     async function checkAuth() {
       try {
-        const res = await fetch('/api/user', {
-          credentials: 'include' // 🔥 agora os cookies da sessão vão junto
-        });
+        const res = await fetch('/api/user', { credentials: 'include' });
         if (!res.ok) throw new Error('Não autorizado');
         const user = await res.json();
         window.discordUser = user;
       } catch (err) {
-        window.location.href = '/';
+        window.location.href = '/'; // redireciona para home se não estiver logado
       }
     }
     checkAuth();
@@ -57,7 +56,8 @@
         React.createElement('div', { className: 'flex flex-col space-y-4' },
           React.createElement('button', { className: 'bg-purple-600 px-6 py-3 rounded-lg hover:bg-purple-500' }, 'Luma Rebuilder'),
           React.createElement('button', { className: 'bg-purple-600 px-6 py-3 rounded-lg hover:bg-purple-500' }, 'Luma Shortner')
-        )
+        ),
+        React.createElement('a', { href: '/auth/logout', className: 'mt-4 text-purple-400 underline' }, 'Sair')
       );
     };
 
