@@ -1,4 +1,4 @@
-// server.js (corrigido para Render + Discord OAuth2)
+// server.js — versão com proteção correta e debug
 require("dotenv").config();
 const express = require("express");
 const session = require("express-session");
@@ -7,45 +7,59 @@ const path = require("path");
 
 const app = express();
 
-// Render usa proxy HTTPS → precisamos avisar o Express
+// Se o app estiver atrás de proxy (Render) — obrigatório para secure cookies funcionar
 app.set("trust proxy", 1);
 
-// Configuração da sessão
-app.use(
-  session({
-    secret: process.env.SESSION_SECRET || "supersecret",
-    resave: false,
-    saveUninitialized: false,
-    cookie: {
-      httpOnly: true,
-      secure: true,     // Render sempre usa HTTPS em produção
-      sameSite: "none", // necessário para redirecionamento do Discord
-    },
-  })
-);
+// ---------- (OPCIONAL) Sessão em Postgres (recomendado em produção com múltiplas réplicas)
+// Para usar, instale: npm i connect-pg-simple pg
+// e defina USE_PG_SESSION=true e DATABASE_URL no seu Render env.
+// Uncomment abaixo se for usar.
+// const pgSession = require("connect-pg-simple")(session);
+// const { Pool } = require("pg");
+// const pgPool = new Pool({ connectionString: process.env.DATABASE_URL, ssl: { rejectUnauthorized: false } });
 
-// Servir arquivos estáticos da pasta public
-app.use(express.static(path.join(__dirname, "public")));
+const sessionConfig = {
+  secret: process.env.SESSION_SECRET || "supersecret",
+  resave: false,
+  saveUninitialized: false,
+  // Sessão configurada para OAuth redirect: SameSite none + secure true
+  cookie: {
+    httpOnly: true,
+    secure: process.env.NODE_ENV === "production", // em Render deve ser true
+    sameSite: "none",
+    maxAge: 1000 * 60 * 60 * 24, // 1 dia (ajuste se quiser)
+  },
+};
 
-// Rota de login → Discord
+// if (process.env.USE_PG_SESSION === "true") {
+//   sessionConfig.store = new pgSession({ pool: pgPool, tableName: "session" });
+//}
+
+app.use(session(sessionConfig));
+
+// (DEBUG) Log simples de cada request — útil pra ver se cookie chega ao servidor
+app.use((req, res, next) => {
+  console.log("<<REQ>>", req.method, req.url, "Cookie header:", req.headers.cookie || "—");
+  next();
+});
+
+// Rota de login (redireciona pro Discord)
 app.get("/login", (req, res) => {
   const authorizeUrl = `https://discord.com/api/oauth2/authorize?client_id=${
     process.env.DISCORD_CLIENT_ID
   }&redirect_uri=${encodeURIComponent(
     process.env.DISCORD_CALLBACK_URL
   )}&response_type=code&scope=identify`;
-
   console.log("🔗 Redirecionando para:", authorizeUrl);
   res.redirect(authorizeUrl);
 });
 
-// Callback do Discord
+// Callback do Discord (troca código por token, pega usuário e salva na sessão)
 app.get("/auth/discord/callback", async (req, res) => {
   const code = req.query.code;
-  if (!code) return res.send("❌ Código de autorização não encontrado.");
+  if (!code) return res.status(400).send("Código não encontrado");
 
   try {
-    // Trocar código por token
     const tokenResponse = await axios.post(
       "https://discord.com/api/oauth2/token",
       new URLSearchParams({
@@ -55,56 +69,59 @@ app.get("/auth/discord/callback", async (req, res) => {
         code,
         redirect_uri: process.env.DISCORD_CALLBACK_URL,
         scope: "identify",
-      }),
-      {
-        headers: { "Content-Type": "application/x-www-form-urlencoded" },
-      }
+      }).toString(),
+      { headers: { "Content-Type": "application/x-www-form-urlencoded" } }
     );
 
     const accessToken = tokenResponse.data.access_token;
-
-    // Pegar dados do usuário
     const userResponse = await axios.get("https://discord.com/api/users/@me", {
       headers: { Authorization: `Bearer ${accessToken}` },
     });
 
-    // Salvar usuário na sessão
     req.session.user = userResponse.data;
     console.log("✅ Usuário autenticado:", req.session.user);
 
-    // Garante que a sessão é persistida antes do redirect
+    // Garantir persistência antes de redirecionar
     req.session.save(err => {
       if (err) console.error("Erro ao salvar sessão:", err);
+      // redireciona para página protegida
       res.redirect("/metodos.html");
     });
   } catch (err) {
-    console.error("❌ Erro no callback:", err.response?.data || err.message);
+    console.error("Erro no callback:", err.response?.data || err.message);
     res.status(500).send("Erro na autenticação com Discord.");
   }
 });
 
-// Middleware para proteger rotas
+// Middleware de proteção
 function checkAuth(req, res, next) {
-  console.log("🔎 Sessão atual:", req.session.user);
+  console.log("🔎 Sessão atual (no checkAuth):", !!req.session.user);
   if (req.session.user) return next();
   return res.redirect("/");
 }
 
-// Rota protegida
+// Rota protegida — esta rota será chamada antes do express.static abaixo
 app.get("/metodos.html", checkAuth, (req, res) => {
   res.sendFile(path.join(__dirname, "public", "metodos.html"));
 });
 
+// Rota de debug para checar sessão via navegador
+app.get("/_session", (req, res) => {
+  res.json({ user: req.session.user || null });
+});
+
 // Logout
 app.get("/logout", (req, res) => {
-  req.session.destroy(() => {
-    console.log("👋 Sessão destruída");
+  req.session.destroy(err => {
+    if (err) console.error("Erro ao destruir sessão:", err);
+    res.clearCookie("connect.sid");
     res.redirect("/");
   });
 });
 
-// Start server
+// Agora sim serve os arquivos estáticos (index, css, js) — colocado *depois* das rotas protegidas
+app.use(express.static(path.join(__dirname, "public")));
+
+// Start
 const PORT = process.env.PORT || 3000;
-app.listen(PORT, () =>
-  console.log(`🚀 Server rodando em http://localhost:${PORT}`)
-);
+app.listen(PORT, () => console.log(`🚀 Server rodando na porta ${PORT}`));
