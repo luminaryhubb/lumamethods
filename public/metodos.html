@@ -5,61 +5,47 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Luma Methods - HUB</title>
   <script src="https://cdn.tailwindcss.com"></script>
-  <script src="https://unpkg.com/react@18/umd/react.development.js"></script>
-  <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
-  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
 </head>
-<body class="bg-black overflow-hidden">
-  <div id="root"></div>
+<body class="bg-black flex flex-col items-center justify-center h-screen text-white space-y-6">
 
-  <script type="text/babel">
-    const { useState, useEffect } = React;
+  <div id="content">Carregando...</div>
+  <button id="logout" class="mt-4 text-purple-400 underline">Sair</button>
 
-    const getUserFromQuery = () => {
-      const params = new URLSearchParams(window.location.search);
-      if (!params.get("accessToken")) return null;
-      return {
-        accessToken: params.get("accessToken"),
-        id: params.get("id"),
-        username: params.get("username"),
-        discriminator: params.get("discriminator"),
-        avatar: params.get("avatar"),
-      };
+  <script>
+    // 🔹 Pega os parâmetros da query string
+    const params = new URLSearchParams(window.location.search);
+    if (!params.get("id")) {
+      window.location.href = "/"; // redireciona se não tiver login
+    }
+
+    // 🔹 Cria objeto do usuário
+    const user = {
+      id: params.get("id"),
+      username: params.get("username"),
+      discriminator: params.get("discriminator"),
+      avatar: params.get("avatar")
     };
 
-    // 🔹 Salva no localStorage para não perder na navegação
-    let user = JSON.parse(localStorage.getItem("discordUser")) || getUserFromQuery();
-    if (user) localStorage.setItem("discordUser", JSON.stringify(user));
+    // 🔹 Salva no localStorage para persistência
+    localStorage.setItem("discordUser", JSON.stringify(user));
 
-    const App = () => {
-      const [userState, setUserState] = useState(user);
+    // 🔹 Mostra na tela
+    const content = document.getElementById("content");
+    content.innerHTML = `
+      <img src="${user.avatar ? `https://cdn.discordapp.com/avatars/${user.id}/${user.avatar}.png` : 'https://cdn.discordapp.com/embed/avatars/1.png'}" 
+           class="w-24 h-24 rounded-full border-4 border-purple-600" />
+      <h2 class="text-2xl font-bold">Bem-vindo, ${user.username}#${user.discriminator}</h2>
+      <div class="flex flex-col space-y-4 mt-4">
+        <button class="bg-purple-600 px-6 py-3 rounded-lg hover:bg-purple-500">Luma Rebuilder</button>
+        <button class="bg-purple-600 px-6 py-3 rounded-lg hover:bg-purple-500">Luma Shortner</button>
+      </div>
+    `;
 
-      const logout = () => {
-        localStorage.removeItem("discordUser");
-        window.location.href = "/";
-      };
-
-      if (!userState) {
-        return React.createElement('div', { className: 'text-white flex h-screen items-center justify-center' }, 'Você não está logado.');
-      }
-
-      return React.createElement('div', { className: 'flex flex-col items-center justify-center h-screen text-white space-y-6' },
-        React.createElement('img', {
-          src: userState.avatar ? `https://cdn.discordapp.com/avatars/${userState.id}/${userState.avatar}.png` : 'https://cdn.discordapp.com/embed/avatars/1.png',
-          className: 'w-24 h-24 rounded-full border-4 border-purple-600',
-          alt: userState.username
-        }),
-        React.createElement('h2', { className: 'text-2xl font-bold' }, `Bem-vindo, ${userState.username}#${userState.discriminator}`),
-        React.createElement('div', { className: 'flex flex-col space-y-4' },
-          React.createElement('button', { className: 'bg-purple-600 px-6 py-3 rounded-lg hover:bg-purple-500' }, 'Luma Rebuilder'),
-          React.createElement('button', { className: 'bg-purple-600 px-6 py-3 rounded-lg hover:bg-purple-500' }, 'Luma Shortner')
-        ),
-        React.createElement('button', { onClick: logout, className: 'mt-4 text-purple-400 underline' }, 'Sair')
-      );
+    // 🔹 Logout
+    document.getElementById("logout").onclick = () => {
+      localStorage.removeItem("discordUser");
+      window.location.href = "/";
     };
-
-    const root = ReactDOM.createRoot(document.getElementById('root'));
-    root.render(React.createElement(App));
   </script>
 </body>
 </html>
