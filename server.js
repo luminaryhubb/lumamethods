@@ -8,30 +8,33 @@ require("dotenv").config();
 const app = express();
 const PORT = process.env.PORT || 3000;
 
-// Configuração de sessão
+// Sessão
 app.use(session({
-  secret: process.env.SESSION_SECRET,
+  secret: process.env.SESSION_SECRET || "secret",
   resave: false,
   saveUninitialized: false,
-  cookie: { secure: false } // true se usar https com proxy reverso
+  cookie: { secure: false }
 }));
 
-// Servir arquivos estáticos (index.html, metodos.html etc.)
+// Servir arquivos estáticos
 app.use(express.static(path.join(__dirname, "public")));
 
-// Rota inicial -> sempre mostra index.html
+// Página inicial
 app.get("/", (req, res) => {
   res.sendFile(path.join(__dirname, "public", "index.html"));
 });
 
-// Inicia login com Discord
+// Login → redireciona pro Discord
 app.get("/login", (req, res) => {
   const redirectUri = encodeURIComponent(process.env.DISCORD_CALLBACK_URL);
   const clientId = process.env.DISCORD_CLIENT_ID;
 
-  res.redirect(
-    `https://discord.com/api/oauth2/authorize?client_id=${clientId}&redirect_uri=${redirectUri}&response_type=code&scope=identify%20email`
-  );
+  const discordAuthUrl =
+    `https://discord.com/api/oauth2/authorize?client_id=${clientId}` +
+    `&redirect_uri=${redirectUri}` +
+    `&response_type=code&scope=identify%20email`;
+
+  res.redirect(discordAuthUrl);
 });
 
 // Callback do Discord
@@ -40,7 +43,6 @@ app.get("/callback", async (req, res) => {
   if (!code) return res.redirect("/");
 
   try {
-    // Troca code por token
     const params = new URLSearchParams();
     params.append("client_id", process.env.DISCORD_CLIENT_ID);
     params.append("client_secret", process.env.DISCORD_CLIENT_SECRET);
@@ -60,13 +62,11 @@ app.get("/callback", async (req, res) => {
       return res.redirect("/");
     }
 
-    // Busca dados do usuário
     const userRes = await fetch("https://discord.com/api/users/@me", {
       headers: { Authorization: `Bearer ${tokenData.access_token}` }
     });
     const userData = await userRes.json();
 
-    // Salva usuário na sessão
     req.session.user = userData;
     res.redirect("/metodos.html");
   } catch (err) {
@@ -75,17 +75,18 @@ app.get("/callback", async (req, res) => {
   }
 });
 
-// Middleware para proteger rotas
+// Middleware de proteção
 function authRequired(req, res, next) {
   if (!req.session.user) return res.redirect("/");
   next();
 }
 
-// API para pegar dados do usuário logado
+// API → retorna usuário logado
 app.get("/api/user", authRequired, (req, res) => {
   res.json(req.session.user);
 });
 
+// Start
 app.listen(PORT, () => {
   console.log(`Servidor rodando em http://localhost:${PORT}`);
 });
