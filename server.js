@@ -1,4 +1,4 @@
-// server.js
+// server.js (corrigido)
 require("dotenv").config();
 const express = require("express");
 const session = require("express-session");
@@ -6,6 +6,10 @@ const axios = require("axios");
 const path = require("path");
 
 const app = express();
+
+// IMPORTANTE quando o app estiver por trás de um proxy (ex: Render, Heroku)
+// permite que o express-session trate corretamente cookies 'secure'
+app.set("trust proxy", 1);
 
 // Configuração da sessão
 app.use(
@@ -15,7 +19,8 @@ app.use(
     saveUninitialized: false,
     cookie: {
       httpOnly: true,
-      secure: process.env.NODE_ENV === "production", // importante no Render (https)
+      // Em production roda true (HTTPS). Com 'trust proxy' definido, o express sabe que está atrás de proxy HTTPS.
+      secure: process.env.NODE_ENV === "production",
       sameSite: "lax", // ajuda a manter o cookie no OAuth
     },
   })
@@ -68,9 +73,13 @@ app.get("/auth/discord/callback", async (req, res) => {
     // Salvar usuário na sessão
     req.session.user = userResponse.data;
     console.log("✅ Usuário autenticado:", req.session.user);
+    // opcional: forçar salvar sessão antes de redirecionar
+    req.session.save(err => {
+      if (err) console.error("Erro ao salvar sessão:", err);
+      // Redirecionar para métodos
+      res.redirect("/metodos.html");
+    });
 
-    // Redirecionar para métodos
-    res.redirect("/metodos.html");
   } catch (err) {
     console.error("❌ Erro no callback:", err.response?.data || err.message);
     res.status(500).send("Erro na autenticação com Discord.");
