@@ -27,8 +27,8 @@
            alt="Luma">
       <h2 class="text-2xl">Bem-vindo(a), <span id="username" class="text-purple-400 font-bold">...</span></h2>
       <div class="flex justify-center space-x-4">
-        <a href="/#"><button class="px-6 py-3 rounded-full bg-purple-600 hover:bg-purple-500">Luma Rebuilder</button></a>
-        <a href="/#"><button class="px-6 py-3 rounded-full bg-purple-600 hover:bg-purple-500">Luma Shortner</button></a>
+        <a href="builder.html"><button class="px-6 py-3 rounded-full bg-purple-600 hover:bg-purple-500">Luma Rebuilder</button></a>
+        <a href="shortner.html"><button class="px-6 py-3 rounded-full bg-purple-600 hover:bg-purple-500">Luma Shortner</button></a>
       </div>
       <div id="admin-area" class="mt-4"></div>
     </div>
@@ -47,7 +47,7 @@
       const adminIDs = ['1411328138931077142','1066509829025300560','1420447434362060917'];
       if(adminIDs.includes(user.id)){
         document.getElementById('admin-area').innerHTML =
-          '<a href="/admin/index.html"><button class="px-6 py-3 rounded-full bg-purple-600 hover:bg-purple-500">Admin</button></a>';
+          '<a href="admin/dashboard.html"><button class="px-6 py-3 rounded-full bg-purple-600 hover:bg-purple-500">Admin</button></a>';
       }
     }catch(e){ window.location.href = '/'; }
   })();
