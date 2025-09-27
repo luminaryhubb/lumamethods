@@ -1,252 +1,156 @@
-const express = require('express');
-const fs = require('fs');
-const path = require('path');
-const axios = require('axios');
-const cookieParser = require('cookie-parser');
-require('dotenv').config();
+const express = require("express");
+const session = require("express-session");
+const fetch = require("node-fetch");
+const fs = require("fs");
+const path = require("path");
+const bodyParser = require("body-parser");
 
 const app = express();
-app.use(express.json());
-app.use(cookieParser());
+const PORT = process.env.PORT || 3000;
 
-const DATA_FILE = path.join(__dirname, 'data', 'data.json');
+const CLIENT_ID = process.env.CLIENT_ID;
+const CLIENT_SECRET = process.env.CLIENT_SECRET;
+const REDIRECT_URI = process.env.REDIRECT_URI || "http://localhost:3000/auth/discord/callback";
+const SESSION_SECRET = process.env.SESSION_SECRET || "secret123";
+const ADMIN_IDS = ['1411328138931077142','1066509829025300560','1420447434362060917'];
+
+const dataFile = path.join(__dirname, "data.json");
 function readData() {
-  if (!fs.existsSync(DATA_FILE)) return { users: {}, pastes: {}, builders: [] };
-  return JSON.parse(fs.readFileSync(DATA_FILE));
+  if (!fs.existsSync(dataFile)) return { users: {}, pastes: {}, views: 0 };
+  return JSON.parse(fs.readFileSync(dataFile));
 }
-function writeData(d) {
-  fs.writeFileSync(DATA_FILE, JSON.stringify(d, null, 2));
-}
-
-// Admin IDs (env ou fallback)
-const ADMIN_IDS = (process.env.ADMIN_IDS ||
-  '1411328138931077142,1066509829025300560,1420447434362060917')
-  .split(',')
-  .filter(Boolean);
-
-// Discord OAuth config
-const CLIENT_ID = process.env.DISCORD_CLIENT_ID || '';
-const CLIENT_SECRET = process.env.DISCORD_CLIENT_SECRET || '';
-const REDIRECT_URI =
-  process.env.DISCORD_CALLBACK_URL ||
-  'http://localhost:3000/auth/discord/callback';
-
-// --- Helpers ---
-function getUserFromCookie(req) {
-  const cookie = req.cookies.discord_user;
-  if (!cookie) return null;
-  try {
-    return JSON.parse(cookie);
-  } catch {
-    return null;
-  }
+function writeData(data) {
+  fs.writeFileSync(dataFile, JSON.stringify(data, null, 2));
 }
 
-function requireAdmin(req, res, next) {
-  try {
-    const u = getUserFromCookie(req);
-    if (!u || !u.id) return res.status(401).send('Not authorized');
-    if (ADMIN_IDS.includes(u.id.toString())) {
-      req.user = u;
-      return next();
+app.use(express.static("public"));
+app.use(bodyParser.json());
+app.use(session({
+  secret: SESSION_SECRET,
+  resave: false,
+  saveUninitialized: false
+}));
+
+// Middleware auth
+function ensureAuth(req, res, next) {
+  if (!req.session.user) return res.redirect("/");
+  next();
+}
+
+// Reset diário
+function resetDailyUses() {
+  const data = readData();
+  const today = new Date().toISOString().slice(0, 10);
+  for (const uid in data.users) {
+    const u = data.users[uid];
+    if (u.lastReset !== today) {
+      u.usesLeft = ADMIN_IDS.includes(uid) ? Infinity : 3;
+      u.lastReset = today;
     }
-    return res.status(403).send('Forbidden');
-  } catch {
-    return res.status(401).send('Not authorized');
   }
+  writeData(data);
 }
+setInterval(resetDailyUses, 60 * 60 * 1000);
 
-// --- Auth ---
-app.get('/auth/discord', (req, res) => {
-  const url = `https://discord.com/api/oauth2/authorize?client_id=${CLIENT_ID}&redirect_uri=${encodeURIComponent(
-    REDIRECT_URI
-  )}&response_type=code&scope=identify`;
-  res.redirect(url);
+// Discord OAuth
+app.get("/auth/discord", (req, res) => {
+  res.redirect(`https://discord.com/api/oauth2/authorize?client_id=${CLIENT_ID}&redirect_uri=${encodeURIComponent(REDIRECT_URI)}&response_type=code&scope=identify`);
 });
 
-app.get('/auth/discord/callback', async (req, res) => {
+app.get("/auth/discord/callback", async (req, res) => {
   const code = req.query.code;
-  if (!code) return res.redirect('/404.html');
+  if (!code) return res.redirect("/");
   try {
-    const params = new URLSearchParams();
-    params.append('client_id', CLIENT_ID);
-    params.append('client_secret', CLIENT_SECRET);
-    params.append('grant_type', 'authorization_code');
-    params.append('code', code);
-    params.append('redirect_uri', REDIRECT_URI);
-
-    const tokenRes = await axios.post(
-      'https://discord.com/api/oauth2/token',
-      params.toString(),
-      { headers: { 'Content-Type': 'application/x-www-form-urlencoded' } }
-    );
-
-    const accessToken = tokenRes.data.access_token;
-    const userRes = await axios.get('https://discord.com/api/users/@me', {
-      headers: { Authorization: `Bearer ${accessToken}` },
+    const tokenRes = await fetch("https://discord.com/api/oauth2/token", {
+      method: "POST",
+      headers: { "Content-Type": "application/x-www-form-urlencoded" },
+      body: new URLSearchParams({
+        client_id: CLIENT_ID,
+        client_secret: CLIENT_SECRET,
+        grant_type: "authorization_code",
+        code,
+        redirect_uri: REDIRECT_URI
+      })
     });
-    const u = userRes.data;
+    const tokenData = await tokenRes.json();
+    const userRes = await fetch("https://discord.com/api/users/@me", {
+      headers: { Authorization: `Bearer ${tokenData.access_token}` }
+    });
+    const u = await userRes.json();
 
-    const cookieOpts = {
-      httpOnly: true,
-      secure: process.env.NODE_ENV === 'production',
-      sameSite: process.env.NODE_ENV === 'production' ? 'None' : 'Lax',
-      maxAge: 1000 * 60 * 60 * 24,
-    };
-    res.cookie(
-      'discord_user',
-      JSON.stringify({
+    const data = readData();
+    if (!data.users[u.id]) {
+      data.users[u.id] = {
         id: u.id,
         username: u.username,
-        discriminator: u.discriminator,
         avatar: u.avatar,
-      }),
-      cookieOpts
-    );
-
-    // Redireciona usuários normais para /methods.html
-    // Admins vão manualmente para /admin
-    if (ADMIN_IDS.includes(u.id)) {
-      return res.redirect('/admin/index.html');
+        usesLeft: ADMIN_IDS.includes(u.id) ? Infinity : 3,
+        lastReset: new Date().toISOString().slice(0, 10),
+        blocked: false
+      };
+      writeData(data);
     }
-    return res.redirect('/public/methods.html');
-  } catch (e) {
-    console.error('oauth callback error', e && e.toString());
-    res.redirect('/404.html');
+
+    req.session.user = { id: u.id, username: u.username, avatar: u.avatar };
+    res.redirect("/public/methods.html");
+  } catch (err) {
+    console.error(err);
+    res.redirect("/");
   }
 });
 
-app.get('/auth/logout', (req, res) => {
-  res.clearCookie('discord_user');
-  res.redirect('/');
+app.get("/auth/logout", (req, res) => {
+  req.session.destroy(() => res.redirect("/"));
 });
 
-// --- API: User ---
-app.get('/api/user', (req, res) => {
-  const u = getUserFromCookie(req);
-  if (!u) return res.status(401).json({ error: 'Not logged' });
-  res.json(u);
-});
-
-app.get('/api/is-admin', (req, res) => {
-  const u = getUserFromCookie(req);
-  res.json({ admin: !!(u && ADMIN_IDS.includes(u.id)), id: u ? u.id : null });
-});
-
-// --- API: Pastebin ---
-app.get('/api/pastes', (req, res) => {
+app.get("/api/user", ensureAuth, (req, res) => {
   const data = readData();
-  res.json(Object.values(data.pastes || {}));
+  const user = data.users[req.session.user.id];
+  res.json(user);
 });
 
-app.post('/api/pastes', (req, res) => {
-  const { text, redirect } = req.body;
-  if (!text) return res.status(400).json({ error: 'text required' });
-
+// Builder endpoint
+app.post("/api/builder/use", ensureAuth, (req, res) => {
   const data = readData();
-  data.pastes = data.pastes || {};
-  const id = Math.random().toString(36).slice(2, 10);
-  data.pastes[id] = {
-    id,
-    text,
-    redirect: redirect || null,
-    createdAt: new Date().toISOString(),
-    views: 0,
-  };
+  const user = data.users[req.session.user.id];
+  if (!user) return res.status(403).json({ error: "Usuário não encontrado" });
+  if (user.blocked) return res.status(403).json({ error: "Bloqueado" });
+
+  if (!ADMIN_IDS.includes(user.id)) {
+    if (user.usesLeft <= 0) return res.status(403).json({ error: "Sem usos restantes" });
+    user.usesLeft -= 1;
+  }
+  writeData(data);
+  res.json({ success: true, link: "https://exemplo.com/generated-link" });
+});
+
+// Paste endpoints
+app.post("/api/create", ensureAuth, (req, res) => {
+  const { text, password, redirect } = req.body;
+  if (!text || !password) return res.status(400).json({ error: "Faltando dados" });
+  const id = Math.random().toString(36).slice(2, 8);
+  const data = readData();
+  data.pastes[id] = { text, password, redirect };
   writeData(data);
   res.json({ id });
 });
 
-app.delete('/api/pastes/:id', requireAdmin, (req, res) => {
-  const id = req.params.id;
+app.get("/paste/:id", (req, res) => {
   const data = readData();
-  if (data.pastes && data.pastes[id]) {
-    delete data.pastes[id];
-    writeData(data);
-  }
-  res.json({ ok: true });
+  const paste = data.pastes[req.params.id];
+  if (!paste) return res.status(404).send("Paste não encontrado");
+  res.send(`<pre>${paste.text}</pre>`);
 });
 
-// --- API: Builder ---
-app.post('/api/builder/use', (req, res) => {
-  const user = req.body.user;
-  if (!user || !user.id)
-    return res.status(400).json({ error: 'user required' });
-
+// Admin stats
+app.get("/api/admin/stats", ensureAuth, (req, res) => {
+  if (!ADMIN_IDS.includes(req.session.user.id)) return res.status(403).json({ error: "Sem permissão" });
   const data = readData();
-  data.users = data.users || {};
-  const uid = user.id;
-  const today = new Date().toISOString().slice(0, 10);
-
-  // Admins têm usos infinitos
-  if (ADMIN_IDS.includes(uid)) {
-    return res.json({ ok: true, usesLeft: Infinity });
-  }
-
-  data.users[uid] = data.users[uid] || {
-    id: uid,
-    username: user.username || 'unknown',
-    avatar: user.avatar || '',
-    usesLeft: 3,
-    lastReset: today,
-  };
-
-  // Reset diário
-  if (data.users[uid].lastReset !== today) {
-    data.users[uid].usesLeft = 3;
-    data.users[uid].lastReset = today;
-  }
-
-  if (data.users[uid].usesLeft <= 0)
-    return res.status(403).json({ error: 'no uses left' });
-
-  data.users[uid].usesLeft -= 1;
-  writeData(data);
-  return res.json({ ok: true, usesLeft: data.users[uid].usesLeft });
+  res.json({
+    totalUsers: Object.keys(data.users).length,
+    totalPastes: Object.keys(data.pastes).length,
+    views: data.views || 0
+  });
 });
 
-app.get('/api/builders', (req, res) => {
-  const data = readData();
-  res.json({ builders: data.builders || [] });
-});
-
-// --- Admin APIs ---
-app.get('/api/admin/users', requireAdmin, (req, res) => {
-  const data = readData();
-  res.json(Object.values(data.users || {}));
-});
-
-app.get('/api/admin/pastes', requireAdmin, (req, res) => {
-  const data = readData();
-  res.json(Object.values(data.pastes || {}));
-});
-
-app.get('/api/admin/builders', requireAdmin, (req, res) => {
-  const data = readData();
-  res.json(data.builders || []);
-});
-
-// --- Static files ---
-app.use('/public', express.static(path.join(__dirname, 'public')));
-
-app.get('/admin', requireAdmin, (req, res) => {
-  res.sendFile(path.join(__dirname, 'admin', 'index.html'));
-});
-
-app.get('/admin/*', requireAdmin, (req, res) => {
-  const rel = req.path.replace('/admin/', '');
-  const filePath = path.join(__dirname, 'admin', rel);
-  if (fs.existsSync(filePath)) return res.sendFile(filePath);
-  return res.status(404).send('Not found');
-});
-
-app.get('/', (req, res) =>
-  res.sendFile(path.join(__dirname, 'public', 'index.html'))
-);
-app.get('/404.html', (req, res) =>
-  res.sendFile(path.join(__dirname, 'public', '404.html'))
-);
-
-// --- Start ---
-const PORT = process.env.PORT || 3000;
-app.listen(PORT, () => console.log('Server running on port', PORT));
+app.listen(PORT, () => console.log("Server rodando na porta " + PORT));
