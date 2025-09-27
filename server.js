@@ -8,12 +8,14 @@ const bodyParser = require("body-parser");
 const app = express();
 const PORT = process.env.PORT || 3000;
 
-const CLIENT_ID = process.env.CLIENT_ID;
-const CLIENT_SECRET = process.env.CLIENT_SECRET;
-const REDIRECT_URI = process.env.REDIRECT_URI || "http://localhost:3000/auth/discord/callback";
+// 🔹 Variáveis do .env
+const CLIENT_ID = process.env.DISCORD_CLIENT_ID;
+const CLIENT_SECRET = process.env.DISCORD_CLIENT_SECRET;
+const REDIRECT_URI = process.env.DISCORD_CALLBACK_URL || "http://localhost:3000/auth/discord/callback";
 const SESSION_SECRET = process.env.SESSION_SECRET || "secret123";
-const ADMIN_IDS = ['1411328138931077142','1066509829025300560','1420447434362060917'];
+const ADMIN_IDS = process.env.ADMIN_IDS ? process.env.ADMIN_IDS.split(",") : [];
 
+// 🔹 Arquivo de dados
 const dataFile = path.join(__dirname, "data.json");
 function readData() {
   if (!fs.existsSync(dataFile)) return { users: {}, pastes: {}, views: 0 };
@@ -25,19 +27,21 @@ function writeData(data) {
 
 app.use(express.static("public"));
 app.use(bodyParser.json());
-app.use(session({
-  secret: SESSION_SECRET,
-  resave: false,
-  saveUninitialized: false
-}));
+app.use(
+  session({
+    secret: SESSION_SECRET,
+    resave: false,
+    saveUninitialized: false,
+  })
+);
 
-// Middleware auth
+// 🔹 Middleware de autenticação
 function ensureAuth(req, res, next) {
   if (!req.session.user) return res.redirect("/");
   next();
 }
 
-// Reset diário
+// 🔹 Reset diário de usos
 function resetDailyUses() {
   const data = readData();
   const today = new Date().toISOString().slice(0, 10);
@@ -52,9 +56,13 @@ function resetDailyUses() {
 }
 setInterval(resetDailyUses, 60 * 60 * 1000);
 
-// Discord OAuth
+// 🔹 Login com Discord
 app.get("/auth/discord", (req, res) => {
-  res.redirect(`https://discord.com/api/oauth2/authorize?client_id=${CLIENT_ID}&redirect_uri=${encodeURIComponent(REDIRECT_URI)}&response_type=code&scope=identify`);
+  res.redirect(
+    `https://discord.com/api/oauth2/authorize?client_id=${CLIENT_ID}&redirect_uri=${encodeURIComponent(
+      REDIRECT_URI
+    )}&response_type=code&scope=identify`
+  );
 });
 
 app.get("/auth/discord/callback", async (req, res) => {
@@ -69,12 +77,18 @@ app.get("/auth/discord/callback", async (req, res) => {
         client_secret: CLIENT_SECRET,
         grant_type: "authorization_code",
         code,
-        redirect_uri: REDIRECT_URI
-      })
+        redirect_uri: REDIRECT_URI,
+      }),
     });
+
     const tokenData = await tokenRes.json();
+    if (!tokenData.access_token) {
+      console.error("Erro ao obter token:", tokenData);
+      return res.redirect("/");
+    }
+
     const userRes = await fetch("https://discord.com/api/users/@me", {
-      headers: { Authorization: `Bearer ${tokenData.access_token}` }
+      headers: { Authorization: `Bearer ${tokenData.access_token}` },
     });
     const u = await userRes.json();
 
@@ -86,7 +100,7 @@ app.get("/auth/discord/callback", async (req, res) => {
         avatar: u.avatar,
         usesLeft: ADMIN_IDS.includes(u.id) ? Infinity : 3,
         lastReset: new Date().toISOString().slice(0, 10),
-        blocked: false
+        blocked: false,
       };
       writeData(data);
     }
@@ -94,22 +108,24 @@ app.get("/auth/discord/callback", async (req, res) => {
     req.session.user = { id: u.id, username: u.username, avatar: u.avatar };
     res.redirect("/public/methods.html");
   } catch (err) {
-    console.error(err);
+    console.error("Erro no callback:", err);
     res.redirect("/");
   }
 });
 
+// 🔹 Logout
 app.get("/auth/logout", (req, res) => {
   req.session.destroy(() => res.redirect("/"));
 });
 
+// 🔹 Retorna usuário atual
 app.get("/api/user", ensureAuth, (req, res) => {
   const data = readData();
   const user = data.users[req.session.user.id];
   res.json(user);
 });
 
-// Builder endpoint
+// 🔹 Builder
 app.post("/api/builder/use", ensureAuth, (req, res) => {
   const data = readData();
   const user = data.users[req.session.user.id];
@@ -124,7 +140,7 @@ app.post("/api/builder/use", ensureAuth, (req, res) => {
   res.json({ success: true, link: "https://exemplo.com/generated-link" });
 });
 
-// Paste endpoints
+// 🔹 Paste (shortner)
 app.post("/api/create", ensureAuth, (req, res) => {
   const { text, password, redirect } = req.body;
   if (!text || !password) return res.status(400).json({ error: "Faltando dados" });
@@ -142,14 +158,15 @@ app.get("/paste/:id", (req, res) => {
   res.send(`<pre>${paste.text}</pre>`);
 });
 
-// Admin stats
+// 🔹 Admin stats
 app.get("/api/admin/stats", ensureAuth, (req, res) => {
-  if (!ADMIN_IDS.includes(req.session.user.id)) return res.status(403).json({ error: "Sem permissão" });
+  if (!ADMIN_IDS.includes(req.session.user.id))
+    return res.status(403).json({ error: "Sem permissão" });
   const data = readData();
   res.json({
     totalUsers: Object.keys(data.users).length,
     totalPastes: Object.keys(data.pastes).length,
-    views: data.views || 0
+    views: data.views || 0,
   });
 });
 
