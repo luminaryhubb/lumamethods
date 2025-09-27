@@ -1,37 +1,84 @@
-<!doctype html>
+<!DOCTYPE html>
 <html lang="pt-BR">
 <head>
-  <meta charset="utf-8"/>
-  <title>Luma Paste</title>
-  <meta name="viewport" content="width=device-width,initial-scale=1"/>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Luma Shortner</title>
   <script src="https://cdn.tailwindcss.com"></script>
 </head>
-<body class="bg-black text-white min-h-screen flex items-center justify-center">
-  <div class="max-w-lg w-full p-6 bg-gray-900 rounded-xl space-y-4">
-    <h2 class="text-xl font-bold text-purple-400">Criar novo Paste</h2>
-    <input id="password" type="password" placeholder="Senha" class="w-full p-2 rounded bg-gray-800 border border-gray-700">
-    <textarea id="content" placeholder="Digite o conteúdo..." rows="6" class="w-full p-2 rounded bg-gray-800 border border-gray-700"></textarea>
-    <button id="create" class="px-6 py-3 w-full rounded-full bg-purple-600 hover:bg-purple-500">Gerar Link</button>
-    <div id="result" class="mt-4 text-green-400 text-sm"></div>
+<body class="bg-neutral-900 text-white flex items-center justify-center min-h-screen">
+
+  <div class="bg-neutral-800 p-6 rounded-lg shadow-lg w-full max-w-lg space-y-4">
+    <h1 class="text-2xl font-bold text-purple-400 mb-4">Luma Shortner</h1>
+
+    <!-- Conteúdo -->
+    <div>
+      <label class="block text-sm mb-1">Conteúdo (obrigatório)</label>
+      <textarea id="content" class="w-full p-2 rounded bg-neutral-900 border border-neutral-700" rows="4" placeholder="Digite o conteúdo aqui..."></textarea>
+    </div>
+
+    <!-- Senha -->
+    <div>
+      <label class="block text-sm mb-1">Senha (obrigatório)</label>
+      <input id="password" type="password" class="w-full p-2 rounded bg-neutral-900 border border-neutral-700" placeholder="Digite uma senha..." />
+    </div>
+
+    <!-- Redirecionamento -->
+    <div>
+      <label class="block text-sm mb-1">Link de Redirecionamento (opcional)</label>
+      <input id="redirect" type="text" class="w-full p-2 rounded bg-neutral-900 border border-neutral-700" placeholder="https://exemplo.com" />
+    </div>
+
+    <!-- Botão -->
+    <div class="flex space-x-2">
+      <button id="generateBtn" class="bg-purple-600 hover:bg-purple-700 px-4 py-2 rounded font-bold">
+        Gerar Link
+      </button>
+    </div>
+
+    <!-- Output -->
+    <div id="output" class="mt-4 hidden bg-neutral-900 p-3 rounded border border-neutral-700"></div>
   </div>
 
   <script>
-    document.getElementById('create').onclick = async ()=>{
-      const password = document.getElementById('password').value.trim();
-      const content = document.getElementById('content').value.trim();
-      if(!password || !content) return alert("Preencha tudo.");
-      const r = await fetch('/api/paste/new',{
-        method:'POST',
-        headers:{'Content-Type':'application/json'},
-        body:JSON.stringify({password,content})
-      });
-      const data = await r.json();
-      if(data.success){
-        document.getElementById('result').textContent = "Link: " + window.location.origin + "/api/paste/" + data.id;
-      }else{
-        document.getElementById('result').textContent = "Erro: " + data.error;
+    document.getElementById("generateBtn").addEventListener("click", async () => {
+      const content = document.getElementById("content").value.trim();
+      const password = document.getElementById("password").value.trim();
+      const redirect = document.getElementById("redirect").value.trim();
+
+      if (!content || !password) {
+        alert("Preencha o conteúdo e a senha!");
+        return;
       }
-    };
+
+      try {
+        const res = await fetch("/api/create", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ content, password, redirect })
+        });
+
+        if (!res.ok) {
+          const err = await res.json();
+          alert("Erro: " + (err.error || "Falha ao gerar link"));
+          return;
+        }
+
+        const data = await res.json();
+        const link = window.location.origin + "/p/" + data.id;
+
+        const outDiv = document.getElementById("output");
+        outDiv.innerHTML = `
+          <p class="mb-2">Seu link foi gerado:</p>
+          <a href="${link}" target="_blank" class="text-purple-400 underline">${link}</a>
+          <button class="ml-2 bg-purple-600 px-2 py-1 rounded" onclick="navigator.clipboard.writeText('${link}')">Copiar</button>
+        `;
+        outDiv.classList.remove("hidden");
+
+      } catch (err) {
+        alert("Erro de conexão: " + err.message);
+      }
+    });
   </script>
 </body>
 </html>
