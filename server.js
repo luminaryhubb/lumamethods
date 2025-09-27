@@ -8,16 +8,19 @@ const bodyParser = require("body-parser");
 const app = express();
 const PORT = process.env.PORT || 3000;
 
-// Env vars
+// Variáveis de ambiente
 const CLIENT_ID = process.env.DISCORD_CLIENT_ID;
 const CLIENT_SECRET = process.env.DISCORD_CLIENT_SECRET;
-const REDIRECT_URI = process.env.DISCORD_CALLBACK_URL || "http://localhost:3000/auth/discord/callback";
+const REDIRECT_URI =
+  process.env.DISCORD_CALLBACK_URL ||
+  "http://localhost:3000/auth/discord/callback";
 const SESSION_SECRET = process.env.SESSION_SECRET || "secret123";
-const ADMIN_IDS = (process.env.ADMIN_IDS || "").split(",").map(x => x.trim());
+const ADMIN_IDS = process.env.ADMIN_IDS
+  ? process.env.ADMIN_IDS.split(",")
+  : [];
 
+// Arquivo local de dados
 const dataFile = path.join(__dirname, "data.json");
-
-// Helpers
 function readData() {
   if (!fs.existsSync(dataFile)) return { users: {}, pastes: {}, views: 0 };
   return JSON.parse(fs.readFileSync(dataFile));
@@ -26,14 +29,20 @@ function writeData(data) {
   fs.writeFileSync(dataFile, JSON.stringify(data, null, 2));
 }
 
-// Middlewares
-app.use(bodyParser.json());
-app.use(session({
-  secret: SESSION_SECRET,
-  resave: false,
-  saveUninitialized: false
-}));
+// Servindo as pastas estáticas
+app.use("/public", express.static(path.join(__dirname, "public")));
+app.use("/admin", express.static(path.join(__dirname, "admin")));
 
+app.use(bodyParser.json());
+app.use(
+  session({
+    secret: SESSION_SECRET,
+    resave: false,
+    saveUninitialized: false,
+  })
+);
+
+// Middleware auth
 function ensureAuth(req, res, next) {
   if (!req.session.user) return res.redirect("/");
   next();
@@ -56,7 +65,11 @@ setInterval(resetDailyUses, 60 * 60 * 1000);
 
 // Discord OAuth
 app.get("/auth/discord", (req, res) => {
-  res.redirect(`https://discord.com/api/oauth2/authorize?client_id=${CLIENT_ID}&redirect_uri=${encodeURIComponent(REDIRECT_URI)}&response_type=code&scope=identify`);
+  res.redirect(
+    `https://discord.com/api/oauth2/authorize?client_id=${CLIENT_ID}&redirect_uri=${encodeURIComponent(
+      REDIRECT_URI
+    )}&response_type=code&scope=identify`
+  );
 });
 
 app.get("/auth/discord/callback", async (req, res) => {
@@ -71,18 +84,13 @@ app.get("/auth/discord/callback", async (req, res) => {
         client_secret: CLIENT_SECRET,
         grant_type: "authorization_code",
         code,
-        redirect_uri: REDIRECT_URI
-      })
+        redirect_uri: REDIRECT_URI,
+      }),
     });
     const tokenData = await tokenRes.json();
 
-    if (!tokenData.access_token) {
-      console.error("Erro ao obter token:", tokenData);
-      return res.redirect("/");
-    }
-
     const userRes = await fetch("https://discord.com/api/users/@me", {
-      headers: { Authorization: `Bearer ${tokenData.access_token}` }
+      headers: { Authorization: `Bearer ${tokenData.access_token}` },
     });
     const u = await userRes.json();
 
@@ -94,15 +102,20 @@ app.get("/auth/discord/callback", async (req, res) => {
         avatar: u.avatar,
         usesLeft: ADMIN_IDS.includes(u.id) ? Infinity : 3,
         lastReset: new Date().toISOString().slice(0, 10),
-        blocked: false
+        blocked: false,
       };
       writeData(data);
     }
 
     req.session.user = { id: u.id, username: u.username, avatar: u.avatar };
 
-    // ✅ Redireciona corretamente (sem /public/)
-    res.redirect("/methods.html");
+    // Se for admin → vai pro painel admin
+    if (ADMIN_IDS.includes(u.id)) {
+      res.redirect("/admin/index.html");
+    } else {
+      // Usuário normal → vai pros métodos
+      res.redirect("/public/methods.html");
+    }
   } catch (err) {
     console.error(err);
     res.redirect("/");
@@ -113,14 +126,13 @@ app.get("/auth/logout", (req, res) => {
   req.session.destroy(() => res.redirect("/"));
 });
 
-// API
 app.get("/api/user", ensureAuth, (req, res) => {
   const data = readData();
   const user = data.users[req.session.user.id];
   res.json(user);
 });
 
-// Builder
+// Builder endpoint
 app.post("/api/builder/use", ensureAuth, (req, res) => {
   const data = readData();
   const user = data.users[req.session.user.id];
@@ -128,17 +140,19 @@ app.post("/api/builder/use", ensureAuth, (req, res) => {
   if (user.blocked) return res.status(403).json({ error: "Bloqueado" });
 
   if (!ADMIN_IDS.includes(user.id)) {
-    if (user.usesLeft <= 0) return res.status(403).json({ error: "Sem usos restantes" });
+    if (user.usesLeft <= 0)
+      return res.status(403).json({ error: "Sem usos restantes" });
     user.usesLeft -= 1;
   }
   writeData(data);
   res.json({ success: true, link: "https://exemplo.com/generated-link" });
 });
 
-// Paste
+// Paste endpoints
 app.post("/api/create", ensureAuth, (req, res) => {
   const { text, password, redirect } = req.body;
-  if (!text || !password) return res.status(400).json({ error: "Faltando dados" });
+  if (!text || !password)
+    return res.status(400).json({ error: "Faltando dados" });
   const id = Math.random().toString(36).slice(2, 8);
   const data = readData();
   data.pastes[id] = { text, password, redirect };
@@ -153,18 +167,16 @@ app.get("/paste/:id", (req, res) => {
   res.send(`<pre>${paste.text}</pre>`);
 });
 
-// Admin
+// Admin stats
 app.get("/api/admin/stats", ensureAuth, (req, res) => {
-  if (!ADMIN_IDS.includes(req.session.user.id)) return res.status(403).json({ error: "Sem permissão" });
+  if (!ADMIN_IDS.includes(req.session.user.id))
+    return res.status(403).json({ error: "Sem permissão" });
   const data = readData();
   res.json({
     totalUsers: Object.keys(data.users).length,
     totalPastes: Object.keys(data.pastes).length,
-    views: data.views || 0
+    views: data.views || 0,
   });
 });
-
-// ✅ Só aqui no final servimos os arquivos estáticos
-app.use(express.static("public"));
 
 app.listen(PORT, () => console.log("Server rodando na porta " + PORT));
