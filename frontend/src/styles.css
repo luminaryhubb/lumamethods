@@ -1,0 +1,4 @@
+@tailwind base; @tailwind components; @tailwind utilities;
+body { font-family: 'JetBrains Mono', monospace; }
+.canvas-bg { position:fixed; inset:0; z-index:0; }
+.app-root { position:relative; z-index:10; }
