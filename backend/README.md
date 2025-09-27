@@ -1,1 +1,0 @@
-Create .env from .env.example and run `npm install` then `node server.js`
