@@ -3,41 +3,35 @@
 <head>
   <meta charset="utf-8"/>
   <title>Luma Paste</title>
+  <meta name="viewport" content="width=device-width,initial-scale=1"/>
   <script src="https://cdn.tailwindcss.com"></script>
 </head>
-<body class="bg-black text-white flex items-center justify-center min-h-screen">
-  <div class="bg-gray-900 p-6 rounded-xl shadow-xl w-full max-w-lg space-y-4">
-    <h1 class="text-2xl font-bold text-purple-400 text-center">Criar Paste</h1>
-    <form id="create-form" class="space-y-3">
-      <textarea id="text" placeholder="Digite seu texto..." class="w-full p-2 rounded bg-gray-800"></textarea>
-      <input id="password" type="password" placeholder="Senha" class="w-full p-2 rounded bg-gray-800"/>
-      <input id="redirect" type="text" placeholder="Redirect opcional" class="w-full p-2 rounded bg-gray-800"/>
-      <button class="px-6 py-3 rounded-full bg-purple-600 hover:bg-purple-500">Gerar</button>
-    </form>
-    <div id="result" class="text-center"></div>
+<body class="bg-black text-white min-h-screen flex items-center justify-center">
+  <div class="max-w-lg w-full p-6 bg-gray-900 rounded-xl space-y-4">
+    <h2 class="text-xl font-bold text-purple-400">Criar novo Paste</h2>
+    <input id="password" type="password" placeholder="Senha" class="w-full p-2 rounded bg-gray-800 border border-gray-700">
+    <textarea id="content" placeholder="Digite o conteúdo..." rows="6" class="w-full p-2 rounded bg-gray-800 border border-gray-700"></textarea>
+    <button id="create" class="px-6 py-3 w-full rounded-full bg-purple-600 hover:bg-purple-500">Gerar Link</button>
+    <div id="result" class="mt-4 text-green-400 text-sm"></div>
   </div>
 
-<script>
-document.getElementById("create-form").addEventListener("submit", async e => {
-  e.preventDefault();
-  const text = document.getElementById("text").value;
-  const password = document.getElementById("password").value;
-  const redirect = document.getElementById("redirect").value;
-
-  const res = await fetch("/api/create", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ text, password, redirect })
-  });
-
-  const data = await res.json();
-  if (data.id) {
-    document.getElementById("result").innerHTML =
-      `<p>Link criado: <a href="/paste/${data.id}" target="_blank" class="text-purple-400">/paste/${data.id}</a></p>`;
-  } else {
-    alert("Erro ao criar paste!");
-  }
-});
-</script>
+  <script>
+    document.getElementById('create').onclick = async ()=>{
+      const password = document.getElementById('password').value.trim();
+      const content = document.getElementById('content').value.trim();
+      if(!password || !content) return alert("Preencha tudo.");
+      const r = await fetch('/api/paste/new',{
+        method:'POST',
+        headers:{'Content-Type':'application/json'},
+        body:JSON.stringify({password,content})
+      });
+      const data = await r.json();
+      if(data.success){
+        document.getElementById('result').textContent = "Link: " + window.location.origin + "/api/paste/" + data.id;
+      }else{
+        document.getElementById('result').textContent = "Erro: " + data.error;
+      }
+    };
+  </script>
 </body>
 </html>
