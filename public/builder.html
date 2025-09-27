@@ -1,0 +1,27 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8"/>
+  <title>Luma Builder</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-black text-white flex items-center justify-center min-h-screen">
+  <div class="bg-gray-900 p-6 rounded-xl shadow-xl w-full max-w-lg text-center space-y-4">
+    <h1 class="text-2xl font-bold text-purple-400">Luma Builder</h1>
+    <button id="generate" class="px-6 py-3 rounded-full bg-purple-600 hover:bg-purple-500">Gerar Link</button>
+    <p id="result"></p>
+  </div>
+
+<script>
+document.getElementById("generate").addEventListener("click", async () => {
+  const res = await fetch("/api/builder/use", { method: "POST" });
+  const data = await res.json();
+  if(data.success){
+    document.getElementById("result").innerHTML = `✅ Link gerado: <a href="${data.link}" class="text-purple-400">${data.link}</a>`;
+  } else {
+    alert(data.error || "Erro");
+  }
+});
+</script>
+</body>
+</html>
