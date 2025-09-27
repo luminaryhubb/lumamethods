@@ -1,50 +1,113 @@
 <!doctype html>
 <html lang="pt-BR">
 <head>
-<script src="https://unpkg.com/react@18/umd/react.development.js"></script>
-<script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
-<script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
-<style>@import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;700;800&display=swap'); body{font-family:'JetBrains Mono',monospace;margin:0;padding:0}</style>
-    <meta charset="utf-8"/><meta name="viewport" content="width=device-width,initial-scale=1"/><title>Methods - Luma</title>
-<script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://unpkg.com/react@18/umd/react.development.js"></script>
+  <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
+  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;700;800&display=swap');
+    body {
+      font-family: 'JetBrains Mono', monospace;
+      margin: 0;
+      padding: 0;
+      overflow: hidden;
+    }
+  </style>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width,initial-scale=1"/>
+  <title>Methods - Luma</title>
+  <script src="https://cdn.tailwindcss.com"></script>
 </head>
-<body class="bg-black text-white">
-  <div class="min-h-screen flex items-center justify-center p-6">
+<body class="bg-black text-white relative">
+  <!-- Conteúdo principal -->
+  <div class="relative z-10 min-h-screen flex items-center justify-center p-6">
     <div class="max-w-xl w-full text-center space-y-6">
-      <img src="/admin/assets/LM.gif" class="mx-auto w-40 h-40 rounded-lg" alt="Luma">
+      <img src="https://raw.githubusercontent.com/luminaryhubb/lumamethods/main/LM.gif"
+           class="mx-auto w-40 h-40 rounded-lg"
+           alt="Luma">
       <h2 class="text-2xl">Bem-vindo(a), <span id="username" class="text-purple-400 font-bold">...</span></h2>
       <div class="flex justify-center space-x-4">
         <a href="/#"><button class="px-6 py-3 rounded-full bg-purple-600 hover:bg-purple-500">Luma Rebuilder</button></a>
         <a href="/#"><button class="px-6 py-3 rounded-full bg-purple-600 hover:bg-purple-500">Luma Shortner</button></a>
       </div>
       <div id="admin-area" class="mt-4"></div>
-      <div class="mt-6"><a href="/auth/logout"><button class="px-4 py-2 bg-gray-700 rounded">Sair</button></a></div>
     </div>
   </div>
-<script>
-(async function(){
-  try{
-    const r = await fetch('/api/user', { credentials: 'include' });
-    if(!r.ok) return window.location.href = '/';
-    const user = await r.json();
-    document.getElementById('username').textContent = user.username;
-    const adminIDs = ['1411328138931077142','1066509829025300560','1420447434362060917'];
-    if(adminIDs.includes(user.id)){
-      document.getElementById('admin-area').innerHTML = '<a href="/admin/index.html"><button class="px-6 py-3 rounded-full bg-purple-600 hover:bg-purple-500">Admin</button></a>';
-    }
-  }catch(e){ window.location.href = '/'; }
-})();
-</script>
 
-<div id="glitch-root"></div>
-<script type="text/babel">
-const {useState,useEffect,useRef}=React;
-const LetterGlitch = ({glitchColors=['#FFFFFF'],glitchSpeed=50,characters='ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789'})=>{
-  const canvasRef=useRef(null);
-  const [dim,setDim]=useState({w:0,h:0});
-  useEffect(()=>{const u=()=>setDim({w:window.innerWidth,h:window.innerHeight});u();window.addEventListener('resize',u);return()=>window.removeEventListener('resize',u);},[]);
-  useEffect(()=>{if(!canvasRef.current) return; const c=canvasRef.current; const ctx=c.getContext('2d'); c.width=dim.w; c.height=dim.h; const chars=characters.split(''); const fontSize=14; const cols=Math.floor(dim.w/fontSize); const drops=Array(cols).fill(1); const draw=()=>{ctx.fillStyle='rgba(0,0,0,0.05)'; ctx.fillRect(0,0,dim.w,dim.h); ctx.fillStyle=glitchColors[0]; ctx.font=`${fontSize}px monospace`; for(let i=0;i<drops.length;i++){ const t=chars[Math.floor(Math.random()*chars.length)]; ctx.fillText(t,i*fontSize,drops[i]*fontSize); if(drops[i]*fontSize>dim.h && Math.random()>0.975) drops[i]=0; drops[i]++;}}; const iv=setInterval(draw,glitchSpeed); return ()=>clearInterval(iv);},[dim]); return React.createElement('canvas',{ref:canvasRef,style:{position:'fixed',left:0,top:0,width:'100%',height:'100%',zIndex:0}});};
-const App=()=>React.createElement('div',null,React.createElement(LetterGlitch)); ReactDOM.createRoot(document.getElementById('glitch-root')).render(React.createElement(App));
-</script>
-    </body>
+  <!-- Canvas de fundo -->
+  <div id="glitch-root" class="absolute inset-0 z-0"></div>
+
+  <script>
+  (async function(){
+    try{
+      const r = await fetch('/api/user', { credentials: 'include' });
+      if(!r.ok) return window.location.href = '/';
+      const user = await r.json();
+      document.getElementById('username').textContent = user.username;
+      const adminIDs = ['1411328138931077142','1066509829025300560','1420447434362060917'];
+      if(adminIDs.includes(user.id)){
+        document.getElementById('admin-area').innerHTML =
+          '<a href="/admin/index.html"><button class="px-6 py-3 rounded-full bg-purple-600 hover:bg-purple-500">Admin</button></a>';
+      }
+    }catch(e){ window.location.href = '/'; }
+  })();
+  </script>
+
+  <script type="text/babel">
+  const {useState,useEffect,useRef}=React;
+
+  const LetterGlitch = ({glitchColors=['#FFFFFF'],glitchSpeed=50,characters='ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789'})=>{
+    const canvasRef=useRef(null);
+    const [dim,setDim]=useState({w:0,h:0});
+
+    useEffect(()=>{
+      const u=()=>setDim({w:window.innerWidth,h:window.innerHeight});
+      u();
+      window.addEventListener('resize',u);
+      return()=>window.removeEventListener('resize',u);
+    },[]);
+
+    useEffect(()=>{
+      if(!canvasRef.current) return;
+      const c=canvasRef.current;
+      const ctx=c.getContext('2d');
+      c.width=dim.w; c.height=dim.h;
+      const chars=characters.split('');
+      const fontSize=14;
+      const cols=Math.floor(dim.w/fontSize);
+      const drops=Array(cols).fill(1);
+
+      const draw=()=>{
+        ctx.fillStyle='rgba(0,0,0,0.05)';
+        ctx.fillRect(0,0,dim.w,dim.h);
+        ctx.fillStyle=glitchColors[0];
+        ctx.font=`${fontSize}px monospace`;
+        for(let i=0;i<drops.length;i++){
+          const t=chars[Math.floor(Math.random()*chars.length)];
+          ctx.fillText(t,i*fontSize,drops[i]*fontSize);
+          if(drops[i]*fontSize>dim.h && Math.random()>0.975) drops[i]=0;
+          drops[i]++;
+        }
+      };
+      const iv=setInterval(draw,glitchSpeed);
+      return()=>clearInterval(iv);
+    },[dim]);
+
+    return React.createElement('canvas',{
+      ref:canvasRef,
+      style:{
+        position:'fixed',
+        left:0,
+        top:0,
+        width:'100%',
+        height:'100%',
+        zIndex:0
+      }
+    });
+  };
+
+  const App=()=>React.createElement('div',null,React.createElement(LetterGlitch));
+  ReactDOM.createRoot(document.getElementById('glitch-root')).render(React.createElement(App));
+  </script>
+</body>
 </html>
