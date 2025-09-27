@@ -1,27 +1,336 @@
 <!doctype html>
 <html lang="pt-BR">
 <head>
-  <meta charset="utf-8"/>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
   <title>Luma Builder</title>
   <script src="https://cdn.tailwindcss.com"></script>
+  <style>
+    body { font-family: ui-monospace, "JetBrains Mono", monospace; background: #07070a; color: #fff; }
+    .step-active { background: linear-gradient(90deg,#6d28d9,#a78bfa); color: white; }
+    .step-inactive { background: rgba(255,255,255,0.03); color: #cbd5e1; }
+    .glass { background: rgba(17,24,39,0.6); backdrop-filter: blur(6px); border: 1px solid rgba(255,255,255,0.03); }
+  </style>
 </head>
-<body class="bg-black text-white flex items-center justify-center min-h-screen">
-  <div class="bg-gray-900 p-6 rounded-xl shadow-xl w-full max-w-lg text-center space-y-4">
-    <h1 class="text-2xl font-bold text-purple-400">Luma Builder</h1>
-    <button id="generate" class="px-6 py-3 rounded-full bg-purple-600 hover:bg-purple-500">Gerar Link</button>
-    <p id="result"></p>
+<body class="min-h-screen flex items-center justify-center p-6">
+  <div class="w-full max-w-2xl space-y-6">
+    <div class="flex items-center justify-between">
+      <h1 class="text-3xl font-bold text-purple-300">Luma Builder</h1>
+      <div id="uses-box" class="text-sm text-neutral-300">Usos restantes: <span id="uses-left">—</span></div>
+    </div>
+
+    <div class="glass p-6 rounded-2xl shadow-xl">
+      <!-- Stepper -->
+      <div class="flex items-center gap-3 mb-6">
+        <div id="step-1" class="px-3 py-2 rounded-md step-active">1. Modo</div>
+        <div class="h-0.5 bg-white/5 flex-1"></div>
+        <div id="step-2" class="px-3 py-2 rounded-md step-inactive">2. Dados</div>
+        <div class="h-0.5 bg-white/5 flex-1"></div>
+        <div id="step-3" class="px-3 py-2 rounded-md step-inactive">3. Gerar</div>
+      </div>
+
+      <!-- Step 1: Modo -->
+      <div id="pane-1" class="">
+        <p class="text-sm text-neutral-300 mb-4">Escolha o modo (obrigatório):</p>
+        <div class="flex gap-3">
+          <button id="mode-roblox" class="flex-1 px-4 py-3 rounded-full bg-neutral-800 hover:bg-neutral-700">Roblox</button>
+          <button id="mode-platform" class="flex-1 px-4 py-3 rounded-full bg-neutral-800 hover:bg-neutral-700">Plataforma (YouTube / TikTok / Spotify)</button>
+        </div>
+        <div class="mt-6 flex justify-end gap-2">
+          <button id="to-step-2" class="px-4 py-2 rounded bg-purple-600 hover:bg-purple-500">Próximo</button>
+        </div>
+      </div>
+
+      <!-- Step 2: Dados -->
+      <div id="pane-2" class="hidden">
+        <!-- Roblox pane -->
+        <div id="roblox-pane" class="hidden space-y-3">
+          <label class="text-sm text-neutral-300">Link privado do Roblox (obrigatório)</label>
+          <input id="roblox-link" type="text" placeholder="https://www.roblox.com/share?code=..." class="w-full p-3 rounded bg-neutral-900 border border-neutral-800" />
+          <label class="text-sm text-neutral-300">Escolha o jogo (obrigatório)</label>
+          <select id="roblox-game" class="w-full p-3 rounded bg-neutral-900 border border-neutral-800">
+            <!-- options injected by JS -->
+          </select>
+        </div>
+
+        <!-- Platform pane -->
+        <div id="platform-pane" class="hidden space-y-3">
+          <label class="text-sm text-neutral-300">Plataforma (obrigatório)</label>
+          <select id="platform-select" class="w-full p-3 rounded bg-neutral-900 border border-neutral-800">
+            <option value="">-- Escolha --</option>
+            <option value="YouTube">YouTube</option>
+            <option value="Tiktok">Tiktok</option>
+            <option value="Spotify">Spotify</option>
+          </select>
+
+          <label class="text-sm text-neutral-300">Link privado (obrigatório)</label>
+          <input id="platform-link" type="text" placeholder="Link privado (ex: https://... )" class="w-full p-3 rounded bg-neutral-900 border border-neutral-800" />
+
+          <label class="text-sm text-neutral-300">Nome de usuário (obrigatório)</label>
+          <input id="platform-username" type="text" placeholder="nomeDeUsuario" class="w-full p-3 rounded bg-neutral-900 border border-neutral-800" />
+        </div>
+
+        <div class="mt-6 flex justify-between">
+          <button id="back-step-1" class="px-4 py-2 rounded bg-neutral-700 hover:bg-neutral-600">Voltar</button>
+          <div class="flex gap-2">
+            <button id="to-step-3" class="px-4 py-2 rounded bg-purple-600 hover:bg-purple-500">Próximo</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Step 3: Gerar / Resultado -->
+      <div id="pane-3" class="hidden">
+        <div id="summary" class="space-y-3">
+          <div id="summary-text" class="text-sm text-neutral-300"></div>
+        </div>
+
+        <div class="mt-4 flex gap-3">
+          <button id="start-builder" class="px-4 py-3 rounded bg-green-600 hover:bg-green-500 flex-1">Iniciar Builder</button>
+          <button id="copy-output" class="px-4 py-3 rounded bg-purple-600 hover:bg-purple-500 hidden">Copiar</button>
+        </div>
+
+        <div id="output-area" class="mt-4 p-3 rounded bg-neutral-900 border border-neutral-800 hidden">
+          <label class="text-xs text-neutral-400">Output gerado (copiar/colar):</label>
+          <pre id="generated-output" class="whitespace-pre-wrap text-sm mt-2"></pre>
+        </div>
+
+        <div class="mt-6 flex justify-between">
+          <button id="back-step-2" class="px-4 py-2 rounded bg-neutral-700 hover:bg-neutral-600">Voltar</button>
+          <button id="reset-all" class="px-4 py-2 rounded bg-red-600 hover:bg-red-500">Resetar</button>
+        </div>
+      </div>
+    </div>
+
+    <p class="text-xs text-neutral-400">Cada usuário tem <strong>3 usos por dia</strong>. Admins têm usos ilimitados. Usos resetam às 00:00 (servidor).</p>
   </div>
 
 <script>
-document.getElementById("generate").addEventListener("click", async () => {
-  const res = await fetch("/api/builder/use", { method: "POST" });
-  const data = await res.json();
-  if(data.success){
-    document.getElementById("result").innerHTML = `✅ Link gerado: <a href="${data.link}" class="text-purple-400">${data.link}</a>`;
-  } else {
-    alert(data.error || "Erro");
+(async function(){
+  // Games list per spec
+  const games = {
+    "99 Noites":"https://www.roblox.com/share?code=4a3bfb1c8c8247458d7996f25d8cba65&type=Server",
+    "Pls Donate":"https://www.roblox.com/pt/games/8737602449/PLS-DONATE",
+    "Doors":"https://www.roblox.com/share?code=3e53b3c450edb044882857e27370bb77&type=Server",
+    "Grow a garden":"https://www.roblox.com/share?code=b31ee3faf6f22a4fab1df07d32bf0646&type=Server",
+    "Murder Mystery 2":"https://www.roblox.com/pt/games/142823291/Murder-Mystery-2",
+    "Adopt Me":"https://www.roblox.com/share?code=a9ab77e67d758848b6100045442e61eb&type=Server",
+    "Blue Lock":"https://www.roblox.com/share?code=5f5f0967e99e3a4c9f82421b51a9a4ff&type=Server",
+    "Jujutsu Shinanigans":"https://www.roblox.com/share?code=234ad24be74f3f44aad2eebdc208555f&type=Server"
+  };
+
+  // Elements
+  const step1El = document.getElementById('step-1');
+  const step2El = document.getElementById('step-2');
+  const step3El = document.getElementById('step-3');
+  const pane1 = document.getElementById('pane-1');
+  const pane2 = document.getElementById('pane-2');
+  const pane3 = document.getElementById('pane-3');
+
+  const modeRobloxBtn = document.getElementById('mode-roblox');
+  const modePlatformBtn = document.getElementById('mode-platform');
+  const toStep2Btn = document.getElementById('to-step-2');
+
+  const robloxPane = document.getElementById('roblox-pane');
+  const robloxLinkInput = document.getElementById('roblox-link');
+  const robloxGameSelect = document.getElementById('roblox-game');
+
+  const platformPane = document.getElementById('platform-pane');
+  const platformSelect = document.getElementById('platform-select');
+  const platformLinkInput = document.getElementById('platform-link');
+  const platformUsernameInput = document.getElementById('platform-username');
+
+  const backStep1Btn = document.getElementById('back-step-1');
+  const toStep3Btn = document.getElementById('to-step-3');
+
+  const summaryText = document.getElementById('summary-text');
+  const startBuilderBtn = document.getElementById('start-builder');
+  const copyOutputBtn = document.getElementById('copy-output');
+  const outputArea = document.getElementById('output-area');
+  const generatedOutput = document.getElementById('generated-output');
+  const backStep2Btn = document.getElementById('back-step-2');
+  const resetAllBtn = document.getElementById('reset-all');
+
+  const usesLeftEl = document.getElementById('uses-left');
+
+  // State
+  let mode = null; // 'Roblox' | 'Platform'
+  let selectedGame = null;
+  let generatedText = '';
+
+  // populate games
+  (function populateGames(){
+    robloxGameSelect.innerHTML = Object.keys(games).map(k=>`<option value="${k}">${k}</option>`).join('');
+    selectedGame = robloxGameSelect.value;
+  })();
+
+  robloxGameSelect.addEventListener('change', ()=> selectedGame = robloxGameSelect.value);
+
+  // Step control functions
+  function setStep(n){
+    step1El.className = n===1 ? 'px-3 py-2 rounded-md step-active' : 'px-3 py-2 rounded-md step-inactive';
+    step2El.className = n===2 ? 'px-3 py-2 rounded-md step-active' : 'px-3 py-2 rounded-md step-inactive';
+    step3El.className = n===3 ? 'px-3 py-2 rounded-md step-active' : 'px-3 py-2 rounded-md step-inactive';
+
+    pane1.classList.toggle('hidden', n!==1);
+    pane2.classList.toggle('hidden', n!==2);
+    pane3.classList.toggle('hidden', n!==3);
   }
-});
+
+  // Mode selection
+  modeRobloxBtn.addEventListener('click', ()=>{
+    mode = 'Roblox';
+    modeRobloxBtn.classList.add('bg-purple-600');
+    modePlatformBtn.classList.remove('bg-purple-600');
+    robloxPane.classList.remove('hidden');
+    platformPane.classList.add('hidden');
+  });
+  modePlatformBtn.addEventListener('click', ()=>{
+    mode = 'Platform';
+    modePlatformBtn.classList.add('bg-purple-600');
+    modeRobloxBtn.classList.remove('bg-purple-600');
+    platformPane.classList.remove('hidden');
+    robloxPane.classList.add('hidden');
+  });
+
+  toStep2Btn.addEventListener('click', ()=>{
+    if(!mode){ alert('Escolha um modo antes de continuar.'); return; }
+    setStep(2);
+  });
+  backStep1Btn.addEventListener('click', ()=> setStep(1));
+  toStep3Btn.addEventListener('click', ()=>{
+    // validate step 2 inputs depending on mode
+    if(mode === 'Roblox'){
+      const link = robloxLinkInput.value.trim();
+      if(!link){ alert('Insira o link privado do Roblox.'); return; }
+      selectedGame = robloxGameSelect.value;
+      if(!selectedGame){ alert('Escolha um jogo.'); return; }
+      summaryText.innerHTML = `<div><strong>Modo:</strong> Roblox</div>
+                               <div><strong>Link privado:</strong> ${escapeHtml(link)}</div>
+                               <div><strong>Jogo selecionado:</strong> ${escapeHtml(selectedGame)}</div>`;
+    } else if(mode === 'Platform'){
+      const plat = platformSelect.value;
+      const link = platformLinkInput.value.trim();
+      const user = platformUsernameInput.value.trim();
+      if(!plat) { alert('Escolha a plataforma.'); return; }
+      if(!link) { alert('Coloque o link privado.'); return; }
+      if(!user) { alert('Coloque o nome de usuário.'); return; }
+      summaryText.innerHTML = `<div><strong>Modo:</strong> Plataforma (${escapeHtml(plat)})</div>
+                               <div><strong>Usuário:</strong> ${escapeHtml(user)}</div>
+                               <div><strong>Link privado:</strong> ${escapeHtml(link)}</div>`;
+    } else {
+      alert('Modo inválido'); return;
+    }
+    setStep(3);
+  });
+
+  backStep2Btn.addEventListener('click', ()=> setStep(2));
+  resetAllBtn.addEventListener('click', ()=>{
+    mode = null;
+    modePlatformBtn.classList.remove('bg-purple-600');
+    modeRobloxBtn.classList.remove('bg-purple-600');
+    robloxPane.classList.add('hidden');
+    platformPane.classList.add('hidden');
+    robloxLinkInput.value = '';
+    platformLinkInput.value = '';
+    platformUsernameInput.value = '';
+    setStep(1);
+    generatedText = '';
+    outputArea.classList.add('hidden');
+    copyOutputBtn.classList.add('hidden');
+  });
+
+  // Helper escape
+  function escapeHtml(s){
+    return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+  }
+
+  // Iniciar Builder (calls API to consume use)
+  startBuilderBtn.addEventListener('click', async ()=>{
+    startBuilderBtn.disabled = true;
+    startBuilderBtn.textContent = 'Gerando...';
+
+    try {
+      const res = await fetch('/api/builder/use', {
+        method: 'POST',
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json' }
+      });
+
+      if (!res.ok) {
+        const err = await res.json().catch(()=>({ error: 'Erro' }));
+        alert(err.error || 'Erro ao gastar uso (talvez sem usos restantes).');
+        startBuilderBtn.disabled = false;
+        startBuilderBtn.textContent = 'Iniciar Builder';
+        await refreshUser(); // update uses display
+        return;
+      }
+
+      // success — build output according to mode
+      let output = '';
+      if (mode === 'Roblox') {
+        const userLink = robloxLinkInput.value.trim();
+        const gameUrl = games[selectedGame];
+        // Format: <linkdousuario>[s](linkdojogoescolhido)
+        output = `<${userLink}>[s](${gameUrl})`;
+      } else {
+        const plat = platformSelect.value;
+        const pLink = platformLinkInput.value.trim();
+        const pUser = platformUsernameInput.value.trim();
+        let prefix = '';
+        if (plat === 'Tiktok') prefix = `https://tiktok.com/${pUser}`;
+        else if (plat === 'YouTube') prefix = `https://youtube.com/@${pUser}`;
+        else if (plat === 'Spotify') prefix = `https://spotify.com/@${pUser}`;
+        else prefix = `${plat}:${pUser}`;
+        // Format: [prefix](<linkprivado>)
+        output = `[${prefix}](<${pLink}>)`;
+      }
+
+      generatedText = output;
+      generatedOutput.textContent = output;
+      outputArea.classList.remove('hidden');
+      copyOutputBtn.classList.remove('hidden');
+
+      // update uses counter
+      await refreshUser();
+    } catch (e) {
+      console.error(e);
+      alert('Erro interno ao iniciar builder.');
+    } finally {
+      startBuilderBtn.disabled = false;
+      startBuilderBtn.textContent = 'Iniciar Builder';
+    }
+  });
+
+  copyOutputBtn.addEventListener('click', async ()=>{
+    if(!generatedText) return;
+    try {
+      await navigator.clipboard.writeText(generatedText);
+      copyOutputBtn.textContent = 'Copiado ✅';
+      setTimeout(()=> copyOutputBtn.textContent = 'Copiar', 1500);
+    } catch(e){
+      alert('Não foi possível copiar. Use copiar manualmente.');
+    }
+  });
+
+  // refresh user uses left
+  async function refreshUser(){
+    try {
+      const r = await fetch('/api/user', { credentials: 'include' });
+      if(!r.ok) { usesLeftEl.textContent = '—'; return; }
+      const u = await r.json();
+      // expect u.usesLeft
+      usesLeftEl.textContent = (u.usesLeft === Infinity ? '∞' : (u.usesLeft ?? '—'));
+    } catch (e){
+      usesLeftEl.textContent = '—';
+    }
+  }
+
+  // On load: check logged user & uses
+  await refreshUser();
+
+  // Start on step 1
+  setStep(1);
+})();
 </script>
 </body>
 </html>
