@@ -1,29 +1,43 @@
 <!doctype html>
-<html><head><meta charset="utf-8"><title>Paste - Luma Shortner</title><script src="https://cdn.tailwindcss.com"></script></head><body class="bg-neutral-900 text-white">
-<div class="min-h-screen flex items-center justify-center p-6">
-  <div class="w-full max-w-2xl bg-gradient-to-br from-purple-700 to-purple-900 p-6 rounded-2xl shadow-2xl">
-    <h2 class="text-3xl font-bold mb-4">Luma Paste</h2>
-    <form id="pasteForm" class="space-y-4">
-      <textarea id="pasteText" class="w-full p-3 rounded bg-purple-800" rows="8" placeholder="Cole seu texto aqui..."></textarea>
-      <div class="flex space-x-2">
-        <input id="pastePassword" type="password" placeholder="Senha" class="p-2 rounded bg-purple-700 flex-1"/>
-        <input id="pasteRedirect" type="text" placeholder="(Opcional) Redirect URL" class="p-2 rounded bg-purple-700 flex-2"/>
-      </div>
-      <div class="flex justify-end space-x-2">
-        <button type="button" id="createBtn" class="bg-white text-purple-700 px-4 py-2 rounded">Criar Paste</button>
-      </div>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8"/>
+  <title>Luma Paste</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-black text-white flex items-center justify-center min-h-screen">
+  <div class="bg-gray-900 p-6 rounded-xl shadow-xl w-full max-w-lg space-y-4">
+    <h1 class="text-2xl font-bold text-purple-400 text-center">Criar Paste</h1>
+    <form id="create-form" class="space-y-3">
+      <textarea id="text" placeholder="Digite seu texto..." class="w-full p-2 rounded bg-gray-800"></textarea>
+      <input id="password" type="password" placeholder="Senha" class="w-full p-2 rounded bg-gray-800"/>
+      <input id="redirect" type="text" placeholder="Redirect opcional" class="w-full p-2 rounded bg-gray-800"/>
+      <button class="px-6 py-3 rounded-full bg-purple-600 hover:bg-purple-500">Gerar</button>
     </form>
-    <div id="result" class="mt-4"></div>
+    <div id="result" class="text-center"></div>
   </div>
-</div>
+
 <script>
-document.getElementById('createBtn').addEventListener('click', async ()=>{
-  const text=document.getElementById('pasteText').value;
-  const password=document.getElementById('pastePassword').value;
-  const redirect=document.getElementById('pasteRedirect').value;
-  if(!text||!password){ alert('Texto e senha obrigatórios'); return; }
-  const res=await fetch('/api/create',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({text,password,redirect})});
-  const j=await res.json();
-  if(j.id){ document.getElementById('result').innerHTML = '<div class="p-3 bg-white text-purple-800 rounded">Link: <a href="/paste/'+j.id+'" class="underline">/paste/'+j.id+'</a></div>'; } else { document.getElementById('result').innerText = JSON.stringify(j); }
+document.getElementById("create-form").addEventListener("submit", async e => {
+  e.preventDefault();
+  const text = document.getElementById("text").value;
+  const password = document.getElementById("password").value;
+  const redirect = document.getElementById("redirect").value;
+
+  const res = await fetch("/api/create", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ text, password, redirect })
+  });
+
+  const data = await res.json();
+  if (data.id) {
+    document.getElementById("result").innerHTML =
+      `<p>Link criado: <a href="/paste/${data.id}" target="_blank" class="text-purple-400">/paste/${data.id}</a></p>`;
+  } else {
+    alert("Erro ao criar paste!");
+  }
 });
-</script></body></html>
+</script>
+</body>
+</html>
