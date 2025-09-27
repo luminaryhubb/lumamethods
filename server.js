@@ -8,12 +8,14 @@ const bodyParser = require("body-parser");
 const app = express();
 const PORT = process.env.PORT || 3000;
 
-// Variáveis de ambiente
 const CLIENT_ID = process.env.DISCORD_CLIENT_ID;
 const CLIENT_SECRET = process.env.DISCORD_CLIENT_SECRET;
-const REDIRECT_URI = process.env.DISCORD_CALLBACK_URL || "http://localhost:3000/auth/discord/callback";
+const REDIRECT_URI =
+  process.env.DISCORD_CALLBACK_URL || "http://localhost:3000/auth/discord/callback";
 const SESSION_SECRET = process.env.SESSION_SECRET || "secret123";
-const ADMIN_IDS = (process.env.ADMIN_IDS || "").split(",");
+const ADMIN_IDS = process.env.ADMIN_IDS
+  ? process.env.ADMIN_IDS.split(",")
+  : ["1411328138931077142", "1066509829025300560", "1420447434362060917"];
 
 const dataFile = path.join(__dirname, "data.json");
 function readData() {
@@ -24,7 +26,6 @@ function writeData(data) {
   fs.writeFileSync(dataFile, JSON.stringify(data, null, 2));
 }
 
-// Middlewares
 app.use(express.static("public"));
 app.use("/admin", express.static("admin"));
 app.use(bodyParser.json());
@@ -36,23 +37,13 @@ app.use(
   })
 );
 
-// Rota raiz → página de login
-app.get("/", (req, res) => {
-  res.sendFile(path.join(__dirname, "public", "index.html"));
-});
-
-// Rota admin → painel
-app.get("/admin", (req, res) => {
-  res.sendFile(path.join(__dirname, "admin", "index.html"));
-});
-
-// Middleware de autenticação
+// Middleware auth
 function ensureAuth(req, res, next) {
   if (!req.session.user) return res.redirect("/");
   next();
 }
 
-// Reset diário de usos
+// Reset diário
 function resetDailyUses() {
   const data = readData();
   const today = new Date().toISOString().slice(0, 10);
@@ -67,7 +58,7 @@ function resetDailyUses() {
 }
 setInterval(resetDailyUses, 60 * 60 * 1000);
 
-// Auth Discord
+// Discord OAuth
 app.get("/auth/discord", (req, res) => {
   res.redirect(
     `https://discord.com/api/oauth2/authorize?client_id=${CLIENT_ID}&redirect_uri=${encodeURIComponent(
@@ -79,7 +70,6 @@ app.get("/auth/discord", (req, res) => {
 app.get("/auth/discord/callback", async (req, res) => {
   const code = req.query.code;
   if (!code) return res.redirect("/");
-
   try {
     const tokenRes = await fetch("https://discord.com/api/oauth2/token", {
       method: "POST",
@@ -92,12 +82,7 @@ app.get("/auth/discord/callback", async (req, res) => {
         redirect_uri: REDIRECT_URI,
       }),
     });
-
     const tokenData = await tokenRes.json();
-    if (!tokenData.access_token) {
-      console.error("Erro OAuth:", tokenData);
-      return res.redirect("/");
-    }
 
     const userRes = await fetch("https://discord.com/api/users/@me", {
       headers: { Authorization: `Bearer ${tokenData.access_token}` },
@@ -119,30 +104,29 @@ app.get("/auth/discord/callback", async (req, res) => {
 
     req.session.user = { id: u.id, username: u.username, avatar: u.avatar };
 
+    // ✅ Corrigido aqui: sem /public
     if (ADMIN_IDS.includes(u.id)) {
       res.redirect("/admin");
     } else {
-      res.redirect("/public/methods.html");
+      res.redirect("/methods.html");
     }
   } catch (err) {
-    console.error("Erro no callback:", err);
+    console.error(err);
     res.redirect("/");
   }
 });
 
-// Logout
 app.get("/auth/logout", (req, res) => {
   req.session.destroy(() => res.redirect("/"));
 });
 
-// API: usuário atual
 app.get("/api/user", ensureAuth, (req, res) => {
   const data = readData();
   const user = data.users[req.session.user.id];
   res.json(user);
 });
 
-// API: usar builder
+// Builder endpoint
 app.post("/api/builder/use", ensureAuth, (req, res) => {
   const data = readData();
   const user = data.users[req.session.user.id];
@@ -150,24 +134,23 @@ app.post("/api/builder/use", ensureAuth, (req, res) => {
   if (user.blocked) return res.status(403).json({ error: "Bloqueado" });
 
   if (!ADMIN_IDS.includes(user.id)) {
-    if (user.usesLeft <= 0) return res.status(403).json({ error: "Sem usos restantes" });
+    if (user.usesLeft <= 0)
+      return res.status(403).json({ error: "Sem usos restantes" });
     user.usesLeft -= 1;
   }
-
   writeData(data);
   res.json({ success: true, link: "https://exemplo.com/generated-link" });
 });
 
-// API: criar paste
+// Paste endpoints
 app.post("/api/create", ensureAuth, (req, res) => {
   const { text, password, redirect } = req.body;
-  if (!text || !password) return res.status(400).json({ error: "Faltando dados" });
-
+  if (!text || !password)
+    return res.status(400).json({ error: "Faltando dados" });
   const id = Math.random().toString(36).slice(2, 8);
   const data = readData();
   data.pastes[id] = { text, password, redirect };
   writeData(data);
-
   res.json({ id });
 });
 
@@ -178,9 +161,10 @@ app.get("/paste/:id", (req, res) => {
   res.send(`<pre>${paste.text}</pre>`);
 });
 
-// API: admin stats
+// Admin stats
 app.get("/api/admin/stats", ensureAuth, (req, res) => {
-  if (!ADMIN_IDS.includes(req.session.user.id)) return res.status(403).json({ error: "Sem permissão" });
+  if (!ADMIN_IDS.includes(req.session.user.id))
+    return res.status(403).json({ error: "Sem permissão" });
   const data = readData();
   res.json({
     totalUsers: Object.keys(data.users).length,
@@ -189,4 +173,4 @@ app.get("/api/admin/stats", ensureAuth, (req, res) => {
   });
 });
 
-app.listen(PORT, () => console.log("✅ Server rodando na porta " + PORT));
+app.listen(PORT, () => console.log("Server rodando na porta " + PORT));
