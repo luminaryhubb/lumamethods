@@ -29,7 +29,11 @@ function Sidebar({ page, setPage }) {
 
 // Dashboard
 function Dashboard() {
-  const [stats, setStats] = useState({ pastes: 0, views: 0, usersToday: 0 });
+  const [stats, setStats] = useState({
+    totalPastes: 0,
+    views: 0,
+    totalUsers: 0,
+  });
 
   useEffect(() => {
     fetch("/api/admin/stats")
@@ -42,10 +46,12 @@ function Dashboard() {
     <div className="p-6 text-white space-y-6 w-full">
       <h2 className="text-2xl font-bold">Dashboard</h2>
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-        <div className="bg-neutral-800 p-4 rounded">Pastes: {stats.pastes}</div>
+        <div className="bg-neutral-800 p-4 rounded">
+          Pastes: {stats.totalPastes}
+        </div>
         <div className="bg-neutral-800 p-4 rounded">Views: {stats.views}</div>
         <div className="bg-neutral-800 p-4 rounded">
-          Users today: {stats.usersToday}
+          Usuários: {stats.totalUsers}
         </div>
       </div>
     </div>
@@ -245,7 +251,7 @@ function App() {
   useEffect(() => {
     fetch("/api/is-admin")
       .then((r) => r.json())
-      .then((j) => setIsAdmin(j.admin))
+      .then((j) => setIsAdmin(j.isAdmin)) // ✅ corrigido
       .catch(() => setIsAdmin(false));
   }, []);
 
