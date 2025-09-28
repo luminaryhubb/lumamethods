@@ -2,7 +2,7 @@
 const { useState, useEffect } = React;
 
 function Sidebar({ page, setPage }) {
-  const items = ["Dashboard", "Pastes", "Builders", "Users", "Config", "Methods"];
+  const items = ["Dashboard", "Pastes", "Builders", "Users", "Config"];
   return (
     <div className="w-64 bg-neutral-900 p-4 flex flex-col space-y-4 text-white h-screen">
       <div className="text-2xl font-bold text-purple-300 mb-4">Luma Admin</div>
@@ -27,7 +27,6 @@ function Sidebar({ page, setPage }) {
   );
 }
 
-// Card de estatísticas
 function StatCard({ title, value, subtitle }) {
   return (
     <div className="bg-neutral-800 p-4 rounded">
@@ -40,7 +39,6 @@ function StatCard({ title, value, subtitle }) {
   );
 }
 
-// Dashboard
 function Dashboard() {
   const [stats, setStats] = useState({
     totalPastes: 0,
@@ -86,7 +84,6 @@ function Dashboard() {
     <div className="p-6 text-white space-y-6">
       <h1 className="text-3xl font-bold">Dashboard</h1>
 
-      {/* Métricas principais */}
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
         <StatCard title="Pastes" value={stats.totalPastes} />
         <StatCard title="Usuários" value={stats.totalUsers} />
@@ -94,7 +91,6 @@ function Dashboard() {
         <StatCard title="Views totais" value={stats.views} />
       </div>
 
-      {/* Charts principais */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         <div className="bg-neutral-800 p-4 rounded shadow-md">
           <div className="text-sm text-neutral-300 mb-2">
@@ -110,9 +106,7 @@ function Dashboard() {
                 <li key={p.id} className="mb-2 border-b border-neutral-700 pb-2">
                   <div className="font-semibold text-purple-300">
                     {p.id}{" "}
-                    <span className="text-neutral-400">
-                      ({p.views} views)
-                    </span>
+                    <span className="text-neutral-400">({p.views} views)</span>
                   </div>
                   <div className="text-xs text-neutral-400">
                     por {p.createdByName || "unknown"}
@@ -123,10 +117,11 @@ function Dashboard() {
         </div>
       </div>
 
-      {/* Charts extras */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         <div className="bg-neutral-800 p-4 rounded shadow-md">
-          <div className="text-sm text-neutral-300 mb-2">Distribuição de Roles</div>
+          <div className="text-sm text-neutral-300 mb-2">
+            Distribuição de Roles
+          </div>
           <canvas id="chart-roles"></canvas>
         </div>
         <div className="bg-neutral-800 p-4 rounded shadow-md">
@@ -147,10 +142,8 @@ function Dashboard() {
   );
 }
 
-// Charts
 function DashboardCharts({ days, usersTimeseries, rolesDistribution, buildersByPlatform }) {
   useEffect(() => {
-    // Chart usuários
     const ctx = document.getElementById("chart-users");
     if (ctx) {
       if (window._chartUsers) window._chartUsers.destroy();
@@ -173,7 +166,6 @@ function DashboardCharts({ days, usersTimeseries, rolesDistribution, buildersByP
       });
     }
 
-    // Chart roles
     const ctxRoles = document.getElementById("chart-roles");
     if (ctxRoles) {
       if (window._chartRoles) window._chartRoles.destroy();
@@ -192,7 +184,6 @@ function DashboardCharts({ days, usersTimeseries, rolesDistribution, buildersByP
       });
     }
 
-    // Chart builders
     const ctxBuilders = document.getElementById("chart-builders");
     if (ctxBuilders) {
       if (window._chartBuilders) window._chartBuilders.destroy();
@@ -215,39 +206,6 @@ function DashboardCharts({ days, usersTimeseries, rolesDistribution, buildersByP
   return null;
 }
 
-// Methods (admin view)
-function Methods() {
-  const [methods, setMethods] = useState([]);
-
-  useEffect(() => {
-    fetch("/api/methods")
-      .then((r) => r.json())
-      .then((j) => setMethods(j))
-      .catch(() => {});
-  }, []);
-
-  return (
-    <div className="p-6 text-white">
-      <h1 className="text-3xl mb-4">Methods</h1>
-      <div className="grid md:grid-cols-2 gap-4">
-        {methods.map((m) => (
-          <div key={m.id} className="bg-neutral-800 p-4 rounded">
-            <h2 className="font-semibold text-purple-300">{m.title}</h2>
-            <p className="text-sm text-neutral-300 mt-2">{m.description}</p>
-          </div>
-        ))}
-        {methods.length === 0 && (
-          <div className="text-neutral-400">Nenhum método</div>
-        )}
-      </div>
-    </div>
-  );
-}
-
-// Users, Pastes, Builders, Config iguais ao que você já tem 👆
-// (não repeti aqui porque você já me trouxe, só acrescentei Methods e charts extras)
-
-// Tela não-admin
 function NotAdmin() {
   return (
     <div className="h-screen w-screen flex items-center justify-center bg-black">
@@ -266,7 +224,6 @@ function NotAdmin() {
   );
 }
 
-// App principal
 function App() {
   const [page, setPage] = useState("Dashboard");
   const [isAdmin, setIsAdmin] = useState(null);
@@ -295,7 +252,6 @@ function App() {
         {page === "Builders" && <Builders />}
         {page === "Users" && <Users />}
         {page === "Config" && <Config />}
-        {page === "Methods" && <Methods />}
       </div>
     </div>
   );
