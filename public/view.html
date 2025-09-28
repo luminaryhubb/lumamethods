@@ -3,32 +3,65 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Acessar Paste</title>
+  <title>Paste Trancado</title>
   <script src="https://cdn.tailwindcss.com"></script>
 </head>
-<body class="bg-gray-900 text-white flex items-center justify-center min-h-screen">
+<body class="bg-black text-white flex items-center justify-center min-h-screen">
 
-  <div class="bg-gray-800 p-6 rounded-2xl shadow-lg w-full max-w-md text-center">
-    <h1 class="text-2xl font-bold mb-4">Acessar Conteúdo</h1>
+  <div class="w-full max-w-xl p-6">
+    <!-- Header -->
+    <div class="flex justify-between items-center mb-6">
+      <h1 class="text-3xl font-bold text-purple-400">Paste Trancado</h1>
+      <a href="https://discord.gg/v2JdwRZktC" target="_blank" 
+         class="text-sm text-gray-400 hover:text-purple-400">
+        Made By Luma
+      </a>
+    </div>
 
-    <!-- Campo de senha -->
-    <input id="passwordInput" type="password" 
-           placeholder="Digite a senha" 
-           class="w-full p-2 rounded-lg text-black mb-3" />
+    <!-- Card -->
+    <div class="bg-gray-900 p-6 rounded-2xl shadow-lg">
 
-    <!-- Botão acessar -->
-    <button id="accessBtn" 
-            class="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg w-full">
-      Acessar
-    </button>
+      <!-- Stepper -->
+      <div class="flex justify-between mb-6">
+        <div id="step1" class="flex-1 text-center">
+          <div class="px-3 py-1 rounded-lg bg-purple-600 font-semibold">1. Senha</div>
+        </div>
+        <div class="w-12 border-t border-gray-700 mx-2"></div>
+        <div id="step2" class="flex-1 text-center">
+          <div class="px-3 py-1 rounded-lg bg-gray-800 text-gray-400 font-semibold">2. Visualizar</div>
+        </div>
+      </div>
 
-    <!-- Área de mensagem / conteúdo -->
-    <div id="message" class="mt-4 text-sm text-red-400"></div>
-    <div id="content" class="mt-4 whitespace-pre-wrap hidden bg-gray-700 p-3 rounded-lg text-left"></div>
+      <!-- Descrição -->
+      <p class="text-gray-400 text-sm mb-4">
+        Para acessar esse paste você precisa de uma senha, peça a senha para o usuário que te mandou.
+      </p>
+
+      <!-- Etapa 1: Senha -->
+      <div id="senhaStep">
+        <input id="passwordInput" type="password" 
+               placeholder="Digite a senha" 
+               class="w-full p-2 rounded-lg text-black mb-3" />
+        <button id="accessBtn" 
+                class="bg-purple-600 hover:bg-purple-700 text-white px-4 py-2 rounded-lg w-full font-semibold">
+          Enviar
+        </button>
+        <div id="message" class="mt-3 text-sm text-red-400"></div>
+      </div>
+
+      <!-- Etapa 2: Conteúdo -->
+      <div id="conteudoStep" class="hidden">
+        <div id="content" class="whitespace-pre-wrap bg-gray-800 p-4 rounded-lg text-left text-sm"></div>
+      </div>
+    </div>
   </div>
 
   <script>
     const pasteId = window.location.pathname.split("/").pop();
+    const step1 = document.getElementById("step1").firstElementChild;
+    const step2 = document.getElementById("step2").firstElementChild;
+    const senhaStep = document.getElementById("senhaStep");
+    const conteudoStep = document.getElementById("conteudoStep");
     const accessBtn = document.getElementById("accessBtn");
     const passwordInput = document.getElementById("passwordInput");
     const message = document.getElementById("message");
@@ -36,7 +69,8 @@
 
     accessBtn.addEventListener("click", async () => {
       message.textContent = "";
-      contentDiv.classList.add("hidden");
+      contentDiv.textContent = "";
+      conteudoStep.classList.add("hidden");
 
       const password = passwordInput.value.trim();
       if (!password) {
@@ -60,11 +94,19 @@
         // Se tiver redirect, manda o usuário pro link
         if (data.redirect) {
           window.location.href = data.redirect;
-        } else {
-          // Mostra o conteúdo
-          contentDiv.textContent = data.text;
-          contentDiv.classList.remove("hidden");
+          return;
         }
+
+        // Marca step 2 como ativo
+        step1.classList.remove("bg-purple-600", "text-white");
+        step1.classList.add("bg-gray-800", "text-gray-400");
+        step2.classList.remove("bg-gray-800", "text-gray-400");
+        step2.classList.add("bg-purple-600", "text-white");
+
+        // Mostra conteúdo
+        senhaStep.classList.add("hidden");
+        conteudoStep.classList.remove("hidden");
+        contentDiv.textContent = data.text;
       } catch (err) {
         console.error(err);
         message.textContent = "Erro ao acessar conteúdo.";
