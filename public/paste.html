@@ -2,113 +2,6 @@
 <html lang="pt-BR">
 <head>
   <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Luma Builder</title>
-  <script src="https://cdn.tailwindcss.com"></script>
-  <style>
-    body {
-      font-family: ui-monospace, "JetBrains Mono", monospace;
-      background: #07070a;
-      color: #fff;
-    }
-    .step-active {
-      background: linear-gradient(90deg, #6d28d9, #a78bfa);
-      color: white;
-    }
-    .step-inactive {
-      background: rgba(255, 255, 255, 0.03);
-      color: #cbd5e1;
-    }
-    .glass {
-      background: rgba(17, 24, 39, 0.6);
-      backdrop-filter: blur(6px);
-      border: 1px solid rgba(255, 255, 255, 0.03);
-    }
-  </style>
-</head>
-<body class="min-h-screen flex items-center justify-center p-6">
-  <div class="w-full max-w-2xl space-y-6">
-    <div class="flex items-center justify-between">
-      <h1 class="text-3xl font-bold text-purple-300">Luma Builder</h1>
-      <div id="uses-box" class="text-sm text-neutral-300">
-        Usos restantes: <span id="uses-left">—</span>
-      </div>
-    </div>
-
-    <div class="glass p-6 rounded-2xl shadow-xl">
-      <!-- Stepper -->
-      <div class="flex items-center gap-3 mb-6">
-        <div id="step-1" class="px-3 py-2 rounded-md step-active">1. Modo</div>
-        <div class="h-0.5 bg-white/5 flex-1"></div>
-        <div id="step-2" class="px-3 py-2 rounded-md step-inactive">2. Dados</div>
-        <div class="h-0.5 bg-white/5 flex-1"></div>
-        <div id="step-3" class="px-3 py-2 rounded-md step-inactive">3. Gerar</div>
-      </div>
-
-      <!-- Step 1: Modo -->
-      <div id="pane-1">
-        <p class="text-sm text-neutral-300 mb-4">Escolha o modo (obrigatório):</p>
-        <div class="flex gap-3">
-          <button id="mode-roblox" class="flex-1 px-4 py-3 rounded-full bg-neutral-800 hover:bg-neutral-700">Roblox</button>
-          <button id="mode-platform" class="flex-1 px-4 py-3 rounded-full bg-neutral-800 hover:bg-neutral-700">Plataformas</button>
-        </div>
-        <div class="mt-6 flex justify-end gap-2">
-          <button id="to-step-2" class="px-4 py-2 rounded bg-purple-600 hover:bg-purple-500">Próximo</button>
-        </div>
-      </div>
-
-      <!-- Step 2: Dados -->
-      <div id="pane-2" class="hidden">
-        <!-- Roblox pane -->
-        <div id="roblox-pane" class="hidden space-y-3">
-          <label class="text-sm text-neutral-300">Link privado do Roblox (obrigatório)</label>
-          <input id="roblox-link" type="text"
-                 placeholder="https://www.roblox.com/share?code=..."
-                 class="w-full p-3 rounded bg-neutral-900 border border-neutral-800" />
-          <label class="text-sm text-neutral-300">Escolha o jogo (obrigatório)</label>
-          <select id="roblox-game"
-                  class="w-full p-3 rounded bg-neutral-900 border border-neutral-800"></select>
-        </div>
-
-        <!-- Platform pane -->
-        <div id="platform-pane" class="hidden space-y-3">
-          <label class="text-sm text-neutral-300">Plataforma (obrigatório)</label>
-          <select id="platform-select"
-                  class="w-full p-3 rounded bg-neutral-900 border border-neutral-800">
-            <option value="">-- Escolha --</option>
-            <option value="YouTube">YouTube</option>
-            <option value="Tiktok">Tiktok</option>
-            <option value="Spotify">Spotify</option>
-            <option value="RobloxProfile">Roblox - Perfil</option>
-          </select>
-
-          <div id="platform-extra-fields" class="space-y-3">
-            <label id="username-label" class="text-sm text-neutral-300">Nome de usuário (obrigatório)</label>
-            <input id="platform-username" type="text"
-                   placeholder="nomeDeUsuario"
-                   class="w-full p-3 rounded bg-neutral-900 border border-neutral-800" />
-            <label class="text-sm text-neutral-300">Link privado (obrigatório)</label>
-            <input id="platform-link" type="text"
-                   placeholder="Link privado (ex: https://... )"
-                   class="w-full p-3 rounded bg-neutral-900 border border-neutral-800" />
-          </div>
-        </div>
-
-        <div class="mt-6 flex justify-between">
-          <button id="back-step-1"
-                  class="px-4 py-2 rounded bg-neutral-700 hover:bg-neutral-600">Voltar</button>
-          <div class="flex gap-2">
-            <button id="to-step-3"
-                    class="pxAqui estão os **arquivos completos**, já com a **proteção igual ao `metodos.html`** (se o usuário não estiver logado, é redirecionado para a página principal de login):  
-
----
-
-### 📄 `paste.html`
-```html
-<!doctype html>
-<html lang="pt-BR">
-<head>
-  <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
   <title>Luma Paste — Stepper</title>
   <script src="https://cdn.tailwindcss.com"></script>
@@ -194,7 +87,7 @@
 
 <script>
 (async function(){
-  // 🔐 Proteção: verifica login
+  // 🔒 Proteção de login
   try {
     const r = await fetch('/api/user', { credentials: 'include' });
     if (!r.ok) return window.location.href = '/';
@@ -202,7 +95,7 @@
     if (!user) return window.location.href = '/';
   } catch(e){ window.location.href = '/'; }
 
-  // Resto do script (stepper e paste)
+  // Elements
   const step1El = document.getElementById('step-1');
   const step2El = document.getElementById('step-2');
   const step3El = document.getElementById('step-3');
@@ -224,10 +117,12 @@
   const errorBox = document.getElementById('error-box');
   const usesLeftEl = document.getElementById('uses-left');
 
+  // Inputs
   const contentInput = document.getElementById('content');
   const passwordInput = document.getElementById('password');
   const redirectInput = document.getElementById('redirect');
 
+  // State
   let generatedLink = '';
   function setStep(n){
     step1El.className = n===1 ? 'px-3 py-2 rounded-md step-active' : 'px-3 py-2 rounded-md step-inactive';
@@ -246,11 +141,10 @@
       const u = await r.json();
       const uses = (u && (u.usesLeft ?? u.uses)) ?? (u.user && u.user.usesLeft);
       usesLeftEl.textContent = uses === Infinity ? '∞' : (uses ?? '—');
-    } catch(e){
-      usesLeftEl.textContent = '—';
-    }
+    } catch(e){ usesLeftEl.textContent = '—'; }
   }
 
+  // Navegação steps
   toStep2Btn.addEventListener('click', ()=>{
     if(!contentInput.value.trim()){ showError('Preencha o conteúdo antes de continuar.'); return; }
     setStep(2);
@@ -281,6 +175,7 @@
     errorBox.classList.remove('hidden');
   }
 
+  // Criar paste
   startCreateBtn.addEventListener('click', async ()=>{
     startCreateBtn.disabled = true;
     startCreateBtn.textContent = 'Gerando...';
