@@ -13,7 +13,8 @@ const PORT = process.env.PORT || 3000;
 const CLIENT_ID = process.env.DISCORD_CLIENT_ID;
 const CLIENT_SECRET = process.env.DISCORD_CLIENT_SECRET;
 const REDIRECT_URI =
-  process.env.DISCORD_CALLBACK_URL || `http://localhost:${PORT}/auth/discord/callback`;
+  process.env.DISCORD_CALLBACK_URL ||
+  `http://localhost:${PORT}/auth/discord/callback`;
 const SESSION_SECRET = process.env.SESSION_SECRET || "secret123";
 
 const ADMIN_IDS = (process.env.ADMIN_IDS || "")
@@ -279,7 +280,8 @@ app.post("/api/paste/:id/access", (req, res) => {
   const p = data.pastes[req.params.id];
   if (!p) return res.status(404).json({ error: "Not found" });
   const pass = (req.body.password || "").toString();
-  if (p.password !== pass) return res.status(403).json({ error: "Invalid password" });
+  if (p.password !== pass)
+    return res.status(403).json({ error: "Invalid password" });
   p.views = (p.views || 0) + 1;
   data.views = (data.views || 0) + 1;
   writeData(data);
