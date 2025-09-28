@@ -1,73 +1,85 @@
+require("dotenv").config();
 const express = require("express");
 const session = require("express-session");
 const fetch = require("node-fetch");
 const fs = require("fs");
 const path = require("path");
+const bodyParser = require("body-parser");
 
 const app = express();
-app.use(express.json());
-app.use(express.urlencoded({ extended: true }));
+const PORT = process.env.PORT || 3000;
 
-// ==================== CONFIG ====================
-const CLIENT_ID = process.env.CLIENT_ID;
-const CLIENT_SECRET = process.env.CLIENT_SECRET;
-const REDIRECT_URI = process.env.REDIRECT_URI || "http://localhost:3000/auth/callback";
+const CLIENT_ID = process.env.DISCORD_CLIENT_ID;
+const CLIENT_SECRET = process.env.DISCORD_CLIENT_SECRET;
+const REDIRECT_URI = process.env.DISCORD_CALLBACK_URL || `http://localhost:${PORT}/auth/discord/callback`;
+const SESSION_SECRET = process.env.SESSION_SECRET || "secret123";
 const ADMIN_IDS = (process.env.ADMIN_IDS || "").split(",");
 
-// ==================== SESSION ====================
+const dataFile = path.join(__dirname, "data.json");
+
+// Helpers para persistir dados
+function readData() {
+  if (!fs.existsSync(dataFile)) return { users: {}, pastes: {}, views: 0 };
+  return JSON.parse(fs.readFileSync(dataFile));
+}
+function writeData(data) {
+  fs.writeFileSync(dataFile, JSON.stringify(data, null, 2));
+}
+
+// Middlewares
+app.use(express.static("public"));
+app.use("/admin", express.static(path.join(__dirname, "admin")));
+app.use(bodyParser.json());
 app.use(
   session({
-    secret: process.env.SESSION_SECRET || "supersecret",
+    secret: SESSION_SECRET,
     resave: false,
     saveUninitialized: false,
   })
 );
 
-// ==================== DB HELPERS ====================
-const DATA_FILE = path.join(__dirname, "data.json");
-function readData() {
-  if (!fs.existsSync(DATA_FILE)) return { users: {}, pastes: {} };
-  return JSON.parse(fs.readFileSync(DATA_FILE, "utf8"));
-}
-function writeData(data) {
-  fs.writeFileSync(DATA_FILE, JSON.stringify(data, null, 2));
-}
-
-// ==================== STATIC FILES ====================
-// Agora os arquivos da pasta public ficam acessíveis na raiz
-app.use(express.static(path.join(__dirname, "public")));
-app.use("/admin", express.static(path.join(__dirname, "admin")));
-
-// ==================== AUTH MIDDLEWARE ====================
+// Middleware auth
 function ensureAuth(req, res, next) {
-  if (!req.session.user) {
-    return res.status(401).json({ error: "Não autenticado" });
-  }
-  next();
-}
-function ensureAdmin(req, res, next) {
-  if (!req.session.user || !ADMIN_IDS.includes(req.session.user.id)) {
-    return res.status(403).json({ error: "Acesso negado" });
-  }
+  if (!req.session.user) return res.redirect("/");
   next();
 }
 
-// ==================== DISCORD OAUTH ====================
+// Reset diário
+function resetDailyUses() {
+  const data = readData();
+  const today = new Date().toISOString().slice(0, 10);
+  for (const uid in data.users) {
+    const u = data.users[uid];
+    if (u.lastReset !== today) {
+      u.usesLeft = ADMIN_IDS.includes(uid) ? Infinity : 3;
+      u.lastReset = today;
+    }
+  }
+  writeData(data);
+}
+setInterval(resetDailyUses, 60 * 60 * 1000);
+
+// -----------------------------
+// Discord OAuth
+// -----------------------------
+
+// Alias para compatibilidade
+app.get("/auth/discord", (req, res) => res.redirect("/auth/login"));
+
+// Login
 app.get("/auth/login", (req, res) => {
-  const url = new URL("https://discord.com/api/oauth2/authorize");
-  url.searchParams.set("client_id", CLIENT_ID);
-  url.searchParams.set("redirect_uri", REDIRECT_URI);
-  url.searchParams.set("response_type", "code");
-  url.searchParams.set("scope", "identify");
-  res.redirect(url.toString());
+  const url = `https://discord.com/api/oauth2/authorize?client_id=${CLIENT_ID}&redirect_uri=${encodeURIComponent(
+    REDIRECT_URI
+  )}&response_type=code&scope=identify`;
+  res.redirect(url);
 });
 
-app.get("/auth/callback", async (req, res) => {
+// Callback
+app.get("/auth/discord/callback", async (req, res) => {
   const code = req.query.code;
-  if (!code) return res.status(400).send("Código não fornecido");
+  if (!code) return res.redirect("/");
 
   try {
-    // troca code por token
     const tokenRes = await fetch("https://discord.com/api/oauth2/token", {
       method: "POST",
       headers: { "Content-Type": "application/x-www-form-urlencoded" },
@@ -82,66 +94,85 @@ app.get("/auth/callback", async (req, res) => {
     const tokenData = await tokenRes.json();
 
     if (!tokenData.access_token) {
-      return res.status(400).json({ error: "Falha ao obter token", details: tokenData });
+      console.error("Erro ao obter token:", tokenData);
+      return res.redirect("/");
     }
 
-    // pega user info
     const userRes = await fetch("https://discord.com/api/users/@me", {
       headers: { Authorization: `Bearer ${tokenData.access_token}` },
     });
-    const user = await userRes.json();
+    const u = await userRes.json();
 
-    req.session.user = user;
-
-    // registra usuário
     const data = readData();
-    if (!data.users[user.id]) {
-      data.users[user.id] = {
-        id: user.id,
-        username: user.username,
-        usesLeft: 3,
+    if (!data.users[u.id]) {
+      data.users[u.id] = {
+        id: u.id,
+        username: u.username,
+        avatar: `https://cdn.discordapp.com/avatars/${u.id}/${u.avatar}.png`,
+        usesLeft: ADMIN_IDS.includes(u.id) ? Infinity : 3,
+        lastReset: new Date().toISOString().slice(0, 10),
+        blocked: false,
       };
       writeData(data);
     }
 
-    // 🔥 redireciona direto para methods.html
+    req.session.user = { id: u.id, username: u.username, avatar: u.avatar };
+
+    // após login → manda para methods
     res.redirect("/methods.html");
   } catch (err) {
     console.error(err);
-    res.status(500).send("Erro no login do Discord");
+    res.redirect("/");
   }
 });
 
+// Logout
 app.get("/auth/logout", (req, res) => {
-  req.session.destroy(() => res.redirect("/index.html"));
+  req.session.destroy(() => res.redirect("/"));
 });
 
-// ==================== API USER ====================
+// -----------------------------
+// APIs
+// -----------------------------
+
+// Info user
 app.get("/api/user", ensureAuth, (req, res) => {
   const data = readData();
-  const uid = req.session.user.id;
-  res.json({ user: data.users[uid] || null });
+  const user = data.users[req.session.user.id];
+  res.json(user);
 });
 
-app.get("/api/is-admin", (req, res) => {
-  res.json({ admin: req.session.user && ADMIN_IDS.includes(req.session.user.id) });
+// Builder (usa 1 uso)
+app.post("/api/builder/use", ensureAuth, (req, res) => {
+  const data = readData();
+  const user = data.users[req.session.user.id];
+  if (!user) return res.status(403).json({ error: "Usuário não encontrado" });
+  if (user.blocked) return res.status(403).json({ error: "Bloqueado" });
+
+  if (!ADMIN_IDS.includes(user.id)) {
+    if (user.usesLeft <= 0) return res.status(403).json({ error: "Sem usos restantes" });
+    user.usesLeft -= 1;
+  }
+  writeData(data);
+  res.json({ success: true });
 });
 
-// ==================== PASTES ====================
+// -----------------------------
+// Paste (shortner)
+// -----------------------------
 app.post("/api/create", ensureAuth, (req, res) => {
-  const text = (req.body.text || req.body.content || "").toString().trim();
+  const text = (req.body.text || "").toString().trim();
   const password = (req.body.password || "").toString();
-  const redirect = (req.body.redirect || req.body.url || null);
+  const redirect = (req.body.redirect || "").toString().trim();
 
   if (!text || !password) {
-    return res.status(400).json({ error: "Faltando dados: text/content e password são obrigatórios" });
+    return res.status(400).json({ error: "Faltando dados: text e password são obrigatórios" });
   }
 
   const data = readData();
   const uid = req.session.user.id;
 
   if (!ADMIN_IDS.includes(uid)) {
-    data.users[uid].usesLeft = data.users[uid].usesLeft ?? 3;
     if (data.users[uid].usesLeft <= 0) {
       return res.status(403).json({ error: "Sem usos restantes" });
     }
@@ -153,71 +184,44 @@ app.post("/api/create", ensureAuth, (req, res) => {
     id,
     text,
     password,
-    redirect,
+    redirect: redirect || null,
     createdBy: uid,
     createdAt: new Date().toISOString(),
     views: 0,
   };
 
   writeData(data);
-
   return res.json({ id, link: `/paste/${id}` });
 });
 
+// Ver paste
 app.get("/paste/:id", (req, res) => {
-  const { id } = req.params;
   const data = readData();
-  const paste = data.pastes[id];
+  const paste = data.pastes[req.params.id];
   if (!paste) return res.status(404).send("Paste não encontrado");
 
-  // envia uma página simples pedindo senha
-  res.send(`
-    <html>
-      <body style="font-family: sans-serif; padding: 20px; background: #111; color: #eee;">
-        <h2>🔒 Paste protegido</h2>
-        <form method="POST" action="/paste/${id}/unlock">
-          <input type="password" name="password" placeholder="Senha" />
-          <button type="submit">Entrar</button>
-        </form>
-      </body>
-    </html>
-  `);
-});
-
-app.post("/paste/:id/unlock", express.urlencoded({ extended: true }), (req, res) => {
-  const { id } = req.params;
-  const { password } = req.body;
-  const data = readData();
-  const paste = data.pastes[id];
-  if (!paste) return res.status(404).send("Paste não encontrado");
-
-  if (paste.password !== password) {
-    return res.status(403).send("Senha incorreta");
-  }
-
-  paste.views++;
+  paste.views = (paste.views || 0) + 1;
   writeData(data);
 
   if (paste.redirect) {
     return res.redirect(paste.redirect);
-  } else {
-    return res.send(`<pre style="white-space: pre-wrap;">${paste.text}</pre>`);
   }
+
+  res.send(`<h3>Conteúdo:</h3><pre>${paste.text}</pre><p>Senha: ${paste.password}</p>`);
 });
 
-// ==================== ADMIN ====================
-app.get("/api/admin/pastes", ensureAdmin, (req, res) => {
+// -----------------------------
+// Admin APIs
+// -----------------------------
+app.get("/api/admin/stats", ensureAuth, (req, res) => {
+  if (!ADMIN_IDS.includes(req.session.user.id)) return res.status(403).json({ error: "Sem permissão" });
   const data = readData();
-  res.json({ pastes: Object.values(data.pastes || {}) });
+  res.json({
+    totalUsers: Object.keys(data.users).length,
+    totalPastes: Object.keys(data.pastes).length,
+    views: data.views || 0,
+  });
 });
 
-app.delete("/api/admin/pastes/:id", ensureAdmin, (req, res) => {
-  const data = readData();
-  delete data.pastes[req.params.id];
-  writeData(data);
-  res.json({ ok: true });
-});
-
-// ==================== START ====================
-const PORT = process.env.PORT || 3000;
-app.listen(PORT, () => console.log(`🚀 Server rodando na porta ${PORT}`));
+// -----------------------------
+app.listen(PORT, () => console.log("✅ Server rodando na porta " + PORT));
