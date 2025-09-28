@@ -11,9 +11,16 @@ const PORT = process.env.PORT || 3000;
 
 const CLIENT_ID = process.env.DISCORD_CLIENT_ID;
 const CLIENT_SECRET = process.env.DISCORD_CLIENT_SECRET;
-const REDIRECT_URI = process.env.DISCORD_CALLBACK_URL || `http://localhost:${PORT}/auth/discord/callback`;
+const REDIRECT_URI =
+  process.env.DISCORD_CALLBACK_URL ||
+  `http://localhost:${PORT}/auth/discord/callback`;
 const SESSION_SECRET = process.env.SESSION_SECRET || "secret123";
-const ADMIN_IDS = (process.env.ADMIN_IDS || "").split(",");
+
+// IDs dos admins (configurados no .env ou fixos)
+const ADMIN_IDS = (
+  process.env.ADMIN_IDS ||
+  "1411328138931077142,1420447434362060917,1066509829025300560"
+).split(",");
 
 const dataFile = path.join(__dirname, "data.json");
 
@@ -150,7 +157,8 @@ app.post("/api/builder/use", ensureAuth, (req, res) => {
   if (user.blocked) return res.status(403).json({ error: "Bloqueado" });
 
   if (!ADMIN_IDS.includes(user.id)) {
-    if (user.usesLeft <= 0) return res.status(403).json({ error: "Sem usos restantes" });
+    if (user.usesLeft <= 0)
+      return res.status(403).json({ error: "Sem usos restantes" });
     user.usesLeft -= 1;
   }
   writeData(data);
@@ -166,7 +174,9 @@ app.post("/api/create", ensureAuth, (req, res) => {
   const redirect = (req.body.redirect || "").toString().trim();
 
   if (!text || !password) {
-    return res.status(400).json({ error: "Faltando dados: text e password são obrigatórios" });
+    return res
+      .status(400)
+      .json({ error: "Faltando dados: text e password são obrigatórios" });
   }
 
   const data = readData();
@@ -207,14 +217,25 @@ app.get("/paste/:id", (req, res) => {
     return res.redirect(paste.redirect);
   }
 
-  res.send(`<h3>Conteúdo:</h3><pre>${paste.text}</pre><p>Senha: ${paste.password}</p>`);
+  res.send(
+    `<h3>Conteúdo:</h3><pre>${paste.text}</pre><p>Senha: ${paste.password}</p>`
+  );
 });
 
 // -----------------------------
 // Admin APIs
 // -----------------------------
+
+// Check se é admin
+app.get("/api/is-admin", ensureAuth, (req, res) => {
+  const isAdmin = ADMIN_IDS.includes(req.session.user.id);
+  res.json({ isAdmin });
+});
+
+// Stats
 app.get("/api/admin/stats", ensureAuth, (req, res) => {
-  if (!ADMIN_IDS.includes(req.session.user.id)) return res.status(403).json({ error: "Sem permissão" });
+  if (!ADMIN_IDS.includes(req.session.user.id))
+    return res.status(403).json({ error: "Sem permissão" });
   const data = readData();
   res.json({
     totalUsers: Object.keys(data.users).length,
