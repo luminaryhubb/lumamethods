@@ -206,6 +206,92 @@ function DashboardCharts({ days, usersTimeseries, rolesDistribution, buildersByP
   return null;
 }
 
+// 🚀 TELAS BÁSICAS ADICIONADAS
+function Pastes() {
+  const [pastes, setPastes] = useState([]);
+
+  useEffect(() => {
+    fetch("/api/admin/pastes")
+      .then(r => r.json())
+      .then(setPastes)
+      .catch(err => console.error("Erro carregando pastes", err));
+  }, []);
+
+  return (
+    <div className="p-6 text-white">
+      <h2 className="text-2xl font-bold mb-4">Pastes</h2>
+      {pastes.length === 0 ? (
+        <p>Nenhum paste encontrado.</p>
+      ) : (
+        <ul className="space-y-2">
+          {pastes.map(p => (
+            <li key={p.id} className="p-2 bg-neutral-800 rounded">
+              <span className="font-semibold">{p.id}</span> — {p.views} views
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
+  );
+}
+
+function Builders() {
+  return (
+    <div className="p-6 text-white">
+      <h2 className="text-2xl font-bold mb-4">Builders</h2>
+      <p>Lista de builders em breve...</p>
+    </div>
+  );
+}
+
+function Users() {
+  const [users, setUsers] = useState([]);
+
+  useEffect(() => {
+    fetch("/api/admin/users")
+      .then(r => r.json())
+      .then(setUsers)
+      .catch(err => console.error("Erro carregando usuários", err));
+  }, []);
+
+  return (
+    <div className="p-6 text-white">
+      <h2 className="text-2xl font-bold mb-4">Usuários</h2>
+      {users.length === 0 ? (
+        <p>Nenhum usuário encontrado.</p>
+      ) : (
+        <table className="w-full border border-gray-700 rounded-lg">
+          <thead className="bg-purple-600">
+            <tr>
+              <th className="p-2 text-left">ID</th>
+              <th className="p-2 text-left">Username</th>
+              <th className="p-2 text-left">Email</th>
+            </tr>
+          </thead>
+          <tbody>
+            {users.map(u => (
+              <tr key={u.id} className="border-t border-gray-700">
+                <td className="p-2">{u.id}</td>
+                <td className="p-2">{u.username}</td>
+                <td className="p-2">{u.email}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      )}
+    </div>
+  );
+}
+
+function Config() {
+  return (
+    <div className="p-6 text-white">
+      <h2 className="text-2xl font-bold mb-4">Configurações</h2>
+      <p>Ajuste as configurações do sistema aqui.</p>
+    </div>
+  );
+}
+
 function NotAdmin() {
   return (
     <div className="h-screen w-screen flex items-center justify-center bg-black">
