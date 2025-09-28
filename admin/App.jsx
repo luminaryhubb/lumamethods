@@ -206,9 +206,10 @@ function DashboardCharts({ days, usersTimeseries, rolesDistribution, buildersByP
   return null;
 }
 
-// 🚀 TELAS BÁSICAS ADICIONADAS
+/* ------------------- PASTES ------------------- */
 function Pastes() {
   const [pastes, setPastes] = useState([]);
+  const [info, setInfo] = useState(null);
 
   useEffect(() => {
     fetch("/api/admin/pastes")
@@ -223,27 +224,55 @@ function Pastes() {
       {pastes.length === 0 ? (
         <p>Nenhum paste encontrado.</p>
       ) : (
-        <ul className="space-y-2">
+        <ul className="space-y-4">
           {pastes.map(p => (
-            <li key={p.id} className="p-2 bg-neutral-800 rounded">
-              <span className="font-semibold">{p.id}</span> — {p.views} views
+            <li key={p.id} className="p-4 bg-neutral-800 rounded flex justify-between items-start">
+              <div>
+                <div className="font-semibold text-purple-300">
+                  {p.link} <span className="text-neutral-400">({p.views} views)</span>
+                </div>
+                <div className="text-sm">{p.content}</div>
+                <div className="text-xs text-neutral-400 mt-1">Senha: {p.password}</div>
+              </div>
+              <div className="space-x-2">
+                <button
+                  onClick={() => fetch(`/api/admin/paste/${p.id}`, { method: "DELETE" })}
+                  className="bg-red-600 px-3 py-1 rounded"
+                >
+                  Apagar
+                </button>
+                <button
+                  onClick={() => setInfo(p)}
+                  className="bg-blue-600 px-3 py-1 rounded"
+                >
+                  Info
+                </button>
+              </div>
             </li>
           ))}
         </ul>
+      )}
+
+      {info && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center">
+          <div className="bg-neutral-900 p-6 rounded shadow-lg w-96 text-white">
+            <h3 className="text-xl font-bold mb-2">Informações do Paste</h3>
+            <p><b>ID:</b> {info.id}</p>
+            <p><b>Criado por:</b> {info.username}</p>
+            <button
+              onClick={() => setInfo(null)}
+              className="mt-4 bg-purple-600 px-3 py-1 rounded"
+            >
+              Fechar
+            </button>
+          </div>
+        </div>
       )}
     </div>
   );
 }
 
-function Builders() {
-  return (
-    <div className="p-6 text-white">
-      <h2 className="text-2xl font-bold mb-4">Builders</h2>
-      <p>Lista de builders em breve...</p>
-    </div>
-  );
-}
-
+/* ------------------- USERS ------------------- */
 function Users() {
   const [users, setUsers] = useState([]);
 
@@ -254,31 +283,70 @@ function Users() {
       .catch(err => console.error("Erro carregando usuários", err));
   }, []);
 
+  function updateRole(id, role) {
+    fetch(`/api/admin/users/${id}/role`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ role }),
+    }).then(() => {
+      setUsers(users.map(u => u.id === id ? { ...u, role } : u));
+    });
+  }
+
   return (
     <div className="p-6 text-white">
       <h2 className="text-2xl font-bold mb-4">Usuários</h2>
       {users.length === 0 ? (
         <p>Nenhum usuário encontrado.</p>
       ) : (
-        <table className="w-full border border-gray-700 rounded-lg">
-          <thead className="bg-purple-600">
-            <tr>
-              <th className="p-2 text-left">ID</th>
-              <th className="p-2 text-left">Username</th>
-              <th className="p-2 text-left">Email</th>
-            </tr>
-          </thead>
-          <tbody>
-            {users.map(u => (
-              <tr key={u.id} className="border-t border-gray-700">
-                <td className="p-2">{u.id}</td>
-                <td className="p-2">{u.username}</td>
-                <td className="p-2">{u.email}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
+        <ul className="space-y-3">
+          {users.map(u => (
+            <li key={u.id} className="p-4 bg-neutral-800 rounded flex justify-between">
+              <div>
+                <div className="font-bold">{u.username}</div>
+                <div className="text-xs text-neutral-400">({u.id})</div>
+                <div className="text-sm mt-1">Cargo: {u.role || "Membro"}</div>
+                <div className="text-sm">Usos: {u.usos || 0}</div>
+              </div>
+              <div className="space-x-2">
+                {["Basic", "Plus", "Premium"].map(r => (
+                  <button
+                    key={r}
+                    onClick={() => updateRole(u.id, r)}
+                    className="bg-purple-600 px-2 py-1 rounded"
+                  >
+                    {r}
+                  </button>
+                ))}
+              </div>
+            </li>
+          ))}
+        </ul>
       )}
+    </div>
+  );
+}
+
+function Builders() {
+  const [builders, setBuilders] = useState([]);
+
+  useEffect(() => {
+    fetch("/api/admin/builders")
+      .then(r => r.json())
+      .then(setBuilders)
+      .catch(err => console.error("Erro carregando builders", err));
+  }, []);
+
+  return (
+    <div className="p-6 text-white">
+      <h2 className="text-2xl font-bold mb-4">Builders</h2>
+      <ul className="space-y-2">
+        {builders.map(b => (
+          <li key={b.id} className="p-3 bg-neutral-800 rounded">
+            <div>{b.name} — {b.platform}</div>
+          </li>
+        ))}
+      </ul>
     </div>
   );
 }
