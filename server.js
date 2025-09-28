@@ -31,7 +31,6 @@ function readData() {
       pastes: {},
       builders: [],
       views: 0,
-      stats: { usersTimeseries: [], dates: [] },
     };
   return JSON.parse(fs.readFileSync(dataFile));
 }
@@ -333,16 +332,42 @@ app.get("/api/admin/builders", ensureAuth, (req, res) => {
 app.get("/api/admin/stats", ensureAuth, (req, res) => {
   if (!isAdminId(req.session.user.id))
     return res.status(403).json({ error: "Forbidden" });
+
   const data = readData();
+
   const totalUsers = Object.keys(data.users).length;
   const totalPastes = Object.keys(data.pastes).length;
   const totalBuilders = (data.builders || []).length;
   const totalViews = data.views || 0;
+
+  // últimas 7 datas
+  const days = [];
+  const usersTimeseries = [];
+  for (let i = 6; i >= 0; i--) {
+    const d = new Date();
+    d.setDate(d.getDate() - i);
+    const dayStr = d.toISOString().slice(0, 10);
+    days.push(dayStr);
+
+    const count = Object.values(data.users).filter(
+      (u) => u.createdAt && u.createdAt.slice(0, 10) === dayStr
+    ).length;
+    usersTimeseries.push(count);
+  }
+
+  // top pastes
+  const topPastes = Object.values(data.pastes || {})
+    .sort((a, b) => (b.views || 0) - (a.views || 0))
+    .slice(0, 5);
+
   res.json({
     totalUsers,
     totalPastes,
     totalBuilders,
     totalViews,
+    days,
+    usersTimeseries,
+    topPastes,
   });
 });
 
