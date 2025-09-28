@@ -16,13 +16,13 @@
       color: white;
     }
     .step-inactive {
-      background: rgba(255, 255, 255, 0.1);
+      background: rgba(255, 255, 255, 0.03);
       color: #cbd5e1;
     }
     .glass {
-      background: rgba(17, 24, 39, 0.7);
+      background: rgba(17, 24, 39, 0.6);
       backdrop-filter: blur(6px);
-      border: 1px solid rgba(255, 255, 255, 0.05);
+      border: 1px solid rgba(255, 255, 255, 0.03);
     }
   </style>
 </head>
@@ -59,15 +59,18 @@
 
       <!-- Step 2: Dados -->
       <div id="pane-2" class="hidden">
-        <!-- Roblox -->
+        <!-- Roblox pane -->
         <div id="roblox-pane" class="hidden space-y-3">
           <label class="text-sm text-neutral-300">Link privado do Roblox (obrigatório)</label>
           <input id="roblox-link" type="text"
                  placeholder="https://www.roblox.com/share?code=..."
                  class="w-full p-3 rounded bg-neutral-900 border border-neutral-800" />
+          <label class="text-sm text-neutral-300">Escolha o jogo (obrigatório)</label>
+          <select id="roblox-game"
+                  class="w-full p-3 rounded bg-neutral-900 border border-neutral-800"></select>
         </div>
 
-        <!-- Plataformas -->
+        <!-- Platform pane -->
         <div id="platform-pane" class="hidden space-y-3">
           <label class="text-sm text-neutral-300">Plataforma (obrigatório)</label>
           <select id="platform-select"
@@ -79,15 +82,14 @@
             <option value="RobloxProfile">Roblox - Perfil</option>
           </select>
 
-          <div class="space-y-3">
-            <label class="text-sm text-neutral-300">Nome de usuário (obrigatório)</label>
+          <div id="platform-extra-fields" class="space-y-3">
+            <label id="username-label" class="text-sm text-neutral-300">Nome de usuário (obrigatório)</label>
             <input id="platform-username" type="text"
                    placeholder="nomeDeUsuario"
                    class="w-full p-3 rounded bg-neutral-900 border border-neutral-800" />
-
             <label class="text-sm text-neutral-300">Link privado (obrigatório)</label>
             <input id="platform-link" type="text"
-                   placeholder="https://..."
+                   placeholder="Link privado (ex: https://... )"
                    class="w-full p-3 rounded bg-neutral-900 border border-neutral-800" />
           </div>
         </div>
@@ -95,17 +97,81 @@
         <div class="mt-6 flex justify-between">
           <button id="back-step-1"
                   class="px-4 py-2 rounded bg-neutral-700 hover:bg-neutral-600">Voltar</button>
-          <button id="to-step-3"
-                  class="px-4 py-2 rounded bg-purple-600 hover:bg-purple-500">Próximo</button>
+          <div class="flex gap-2">
+            <button id="to-step-3"
+                    class="pxAqui estão os **arquivos completos**, já com a **proteção igual ao `metodos.html`** (se o usuário não estiver logado, é redirecionado para a página principal de login):  
+
+---
+
+### 📄 `paste.html`
+```html
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Luma Paste — Stepper</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <style>
+    body { font-family: ui-monospace, "JetBrains Mono", monospace; background:#07070a; color:#fff; }
+    .step-active { background: linear-gradient(90deg,#6d28d9,#a78bfa); color: white; }
+    .step-inactive { background: rgba(255,255,255,0.03); color: #cbd5e1; }
+    .glass { background: rgba(17,24,39,0.6); backdrop-filter: blur(6px); border: 1px solid rgba(255,255,255,0.03); }
+  </style>
+</head>
+<body class="min-h-screen flex items-center justify-center p-6">
+  <div class="w-full max-w-2xl space-y-6">
+
+    <div class="flex items-center justify-between">
+      <h1 class="text-3xl font-bold text-purple-300">Luma Paste</h1>
+      <div id="uses-box" class="text-sm text-neutral-300">Usos restantes: <span id="uses-left">—</span></div>
+    </div>
+
+    <div class="glass p-6 rounded-2xl shadow-xl">
+      <!-- Stepper header -->
+      <div class="flex items-center gap-3 mb-6">
+        <div id="step-1" class="px-3 py-2 rounded-md step-active">1. Conteúdo</div>
+        <div class="h-0.5 bg-white/5 flex-1"></div>
+        <div id="step-2" class="px-3 py-2 rounded-md step-inactive">2. Senha & Redirect</div>
+        <div class="h-0.5 bg-white/5 flex-1"></div>
+        <div id="step-3" class="px-3 py-2 rounded-md step-inactive">3. Gerar</div>
+      </div>
+
+      <!-- Pane 1: Conteúdo -->
+      <div id="pane-1">
+        <label class="block text-sm text-neutral-300 mb-2">Conteúdo (obrigatório)</label>
+        <textarea id="content" rows="6" class="w-full p-3 rounded bg-neutral-900 border border-neutral-800 text-sm" placeholder="Digite o conteúdo do paste..."></textarea>
+
+        <div class="mt-6 flex justify-end gap-2">
+          <button id="to-step-2" class="px-4 py-2 rounded bg-purple-600 hover:bg-purple-500">Próximo</button>
         </div>
       </div>
 
-      <!-- Step 3: Gerar -->
+      <!-- Pane 2: Senha & Redirect -->
+      <div id="pane-2" class="hidden">
+        <label class="block text-sm text-neutral-300 mb-2">Senha (obrigatório)</label>
+        <input id="password" type="password" class="w-full p-3 rounded bg-neutral-900 border border-neutral-800 text-sm" placeholder="Escolha uma senha para proteger o paste" />
+
+        <label class="block text-sm text-neutral-300 mt-4 mb-2">Redirecionamento (opcional)</label>
+        <input id="redirect" type="url" class="w-full p-3 rounded bg-neutral-900 border border-neutral-800 text-sm" placeholder="https://exemplo.com (opcional)" />
+
+        <div class="mt-6 flex justify-between">
+          <button id="back-step-1" class="px-4 py-2 rounded bg-neutral-700 hover:bg-neutral-600">Voltar</button>
+          <button id="to-step-3" class="px-4 py-2 rounded bg-purple-600 hover:bg-purple-500">Próximo</button>
+        </div>
+      </div>
+
+      <!-- Pane 3: Gerar / Resultado -->
       <div id="pane-3" class="hidden">
-        <div id="summary" class="space-y-3 text-sm text-neutral-300"></div>
+        <div id="summary" class="space-y-3 text-sm text-neutral-300">
+          <div><strong>Conteúdo:</strong></div>
+          <div id="summary-content" class="whitespace-pre-wrap bg-neutral-900 p-3 rounded text-sm"></div>
+          <div class="pt-2"><strong>Senha:</strong> <span id="summary-password">●●●●●</span></div>
+          <div><strong>Redirecionamento:</strong> <span id="summary-redirect">—</span></div>
+        </div>
 
         <div class="mt-4 flex gap-3">
-          <button id="start-generate" class="px-4 py-3 rounded bg-green-600 hover:bg-green-500 flex-1">Gerar Builder</button>
+          <button id="start-create" class="px-4 py-3 rounded bg-green-600 hover:bg-green-500 flex-1">Gerar Paste (gasta 1 uso)</button>
           <button id="copy-output" class="px-4 py-3 rounded bg-purple-600 hover:bg-purple-500 hidden">Copiar</button>
         </div>
 
@@ -122,11 +188,13 @@
 
       <div id="error-box" class="mt-4 text-sm text-red-400 hidden"></div>
     </div>
+
+    <p class="text-xs text-neutral-400">Observação: cada usuário tem <strong>3 usos por dia</strong>. Admins têm usos ilimitados. Usos resetam às 00:00 (servidor).</p>
   </div>
 
 <script>
 (async function(){
-  // 🔐 Proteção de login
+  // 🔐 Proteção: verifica login
   try {
     const r = await fetch('/api/user', { credentials: 'include' });
     if (!r.ok) return window.location.href = '/';
@@ -134,120 +202,137 @@
     if (!user) return window.location.href = '/';
   } catch(e){ window.location.href = '/'; }
 
-  // Stepper logic
-  const stepEls = [document.getElementById('step-1'), document.getElementById('step-2'), document.getElementById('step-3')];
+  // Resto do script (stepper e paste)
+  const step1El = document.getElementById('step-1');
+  const step2El = document.getElementById('step-2');
+  const step3El = document.getElementById('step-3');
   const pane1 = document.getElementById('pane-1');
   const pane2 = document.getElementById('pane-2');
   const pane3 = document.getElementById('pane-3');
+  const toStep2Btn = document.getElementById('to-step-2');
+  const backStep1Btn = document.getElementById('back-step-1');
+  const toStep3Btn = document.getElementById('to-step-3');
+  const backStep2Btn = document.getElementById('back-step-2');
+  const resetAllBtn = document.getElementById('reset-all');
+  const startCreateBtn = document.getElementById('start-create');
+  const copyBtn = document.getElementById('copy-output');
+  const outputArea = document.getElementById('output-area');
+  const generatedOutput = document.getElementById('generated-output');
+  const summaryContent = document.getElementById('summary-content');
+  const summaryPassword = document.getElementById('summary-password');
+  const summaryRedirect = document.getElementById('summary-redirect');
   const errorBox = document.getElementById('error-box');
   const usesLeftEl = document.getElementById('uses-left');
 
-  const modeRobloxBtn = document.getElementById('mode-roblox');
-  const modePlatformBtn = document.getElementById('mode-platform');
-  const robloxPane = document.getElementById('roblox-pane');
-  const platformPane = document.getElementById('platform-pane');
-  const platformSelect = document.getElementById('platform-select');
+  const contentInput = document.getElementById('content');
+  const passwordInput = document.getElementById('password');
+  const redirectInput = document.getElementById('redirect');
 
-  let mode = null;
-
+  let generatedLink = '';
   function setStep(n){
-    stepEls.forEach((el,i)=> el.className = (i+1===n ? "px-3 py-2 rounded-md step-active" : "px-3 py-2 rounded-md step-inactive"));
+    step1El.className = n===1 ? 'px-3 py-2 rounded-md step-active' : 'px-3 py-2 rounded-md step-inactive';
+    step2El.className = n===2 ? 'px-3 py-2 rounded-md step-active' : 'px-3 py-2 rounded-md step-inactive';
+    step3El.className = n===3 ? 'px-3 py-2 rounded-md step-active' : 'px-3 py-2 rounded-md step-inactive';
     pane1.classList.toggle('hidden', n!==1);
     pane2.classList.toggle('hidden', n!==2);
     pane3.classList.toggle('hidden', n!==3);
     errorBox.classList.add('hidden');
   }
 
+  async function refreshUser(){
+    try {
+      const r = await fetch('/api/user', { credentials: 'include' });
+      if(!r.ok){ usesLeftEl.textContent = '—'; return; }
+      const u = await r.json();
+      const uses = (u && (u.usesLeft ?? u.uses)) ?? (u.user && u.user.usesLeft);
+      usesLeftEl.textContent = uses === Infinity ? '∞' : (uses ?? '—');
+    } catch(e){
+      usesLeftEl.textContent = '—';
+    }
+  }
+
+  toStep2Btn.addEventListener('click', ()=>{
+    if(!contentInput.value.trim()){ showError('Preencha o conteúdo antes de continuar.'); return; }
+    setStep(2);
+  });
+  backStep1Btn.addEventListener('click', ()=> setStep(1));
+
+  toStep3Btn.addEventListener('click', ()=>{
+    if(!passwordInput.value.trim()){ showError('Senha obrigatória.'); return; }
+    summaryContent.textContent = contentInput.value.trim();
+    summaryPassword.textContent = '●'.repeat(Math.max(3,passwordInput.value.length));
+    summaryRedirect.textContent = redirectInput.value.trim() || '—';
+    setStep(3);
+  });
+  backStep2Btn.addEventListener('click', ()=> setStep(2));
+
+  resetAllBtn.addEventListener('click', ()=>{
+    contentInput.value = '';
+    passwordInput.value = '';
+    redirectInput.value = '';
+    generatedLink = '';
+    outputArea.classList.add('hidden');
+    copyBtn.classList.add('hidden');
+    setStep(1);
+  });
+
   function showError(msg){
     errorBox.textContent = msg;
     errorBox.classList.remove('hidden');
   }
 
-  // Botões Step 1
-  modeRobloxBtn.addEventListener('click', ()=>{ mode='roblox'; });
-  modePlatformBtn.addEventListener('click', ()=>{ mode='platform'; });
+  startCreateBtn.addEventListener('click', async ()=>{
+    startCreateBtn.disabled = true;
+    startCreateBtn.textContent = 'Gerando...';
+    errorBox.classList.add('hidden');
 
-  document.getElementById('to-step-2').addEventListener('click', ()=>{
-    if(!mode){ showError("Escolha um modo antes de prosseguir."); return; }
-    robloxPane.classList.toggle('hidden', mode!=='roblox');
-    platformPane.classList.toggle('hidden', mode!=='platform');
-    setStep(2);
-  });
+    const payload = {
+      text: contentInput.value.trim(),
+      password: passwordInput.value.trim(),
+      redirect: redirectInput.value.trim() || null
+    };
 
-  document.getElementById('back-step-1').addEventListener('click', ()=> setStep(1));
-
-  document.getElementById('to-step-3').addEventListener('click', ()=>{
-    let summary = "";
-    if(mode==='roblox'){
-      const link = document.getElementById('roblox-link').value.trim();
-      if(!link){ showError("Informe o link privado do Roblox."); return; }
-      summary = `<strong>Modo:</strong> Roblox<br><strong>Link:</strong> ${link}`;
-    }
-    if(mode==='platform'){
-      const p = platformSelect.value;
-      const u = document.getElementById('platform-username').value.trim();
-      const l = document.getElementById('platform-link').value.trim();
-      if(!p || !u || !l){ showError("Preencha todos os campos da plataforma."); return; }
-      summary = `<strong>Plataforma:</strong> ${p}<br><strong>Usuário:</strong> ${u}<br><strong>Link:</strong> ${l}`;
-    }
-    document.getElementById('summary').innerHTML = summary;
-    setStep(3);
-  });
-
-  document.getElementById('back-step-2').addEventListener('click', ()=> setStep(2));
-
-  document.getElementById('reset-all').addEventListener('click', ()=>{
-    mode = null;
-    document.getElementById('roblox-link').value = "";
-    document.getElementById('platform-username').value = "";
-    document.getElementById('platform-link').value = "";
-    setStep(1);
-  });
-
-  document.getElementById('start-generate').addEventListener('click', async ()=>{
-    const payload = {};
-    if(mode==='roblox'){
-      payload.type="roblox";
-      payload.link=document.getElementById('roblox-link').value.trim();
-    } else {
-      payload.type="platform";
-      payload.platform=platformSelect.value;
-      payload.username=document.getElementById('platform-username').value.trim();
-      payload.link=document.getElementById('platform-link').value.trim();
-    }
-
-    try{
-      const res = await fetch('/api/builder', {
-        method:'POST', credentials:'include',
-        headers:{'Content-Type':'application/json'},
+    try {
+      const res = await fetch('/api/create', {
+        method: 'POST',
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload)
       });
-      const data = await res.json();
-      if(!res.ok) return showError(data.error||"Erro ao gerar builder.");
 
-      const link = window.location.origin + data.link;
-      document.getElementById('generated-output').value = link;
-      document.getElementById('output-area').classList.remove('hidden');
-      document.getElementById('copy-output').classList.remove('hidden');
-    }catch(e){ showError("Erro de conexão."); }
+      const data = await res.json().catch(()=>({ error: 'Resposta inválida' }));
+      if (!res.ok) {
+        showError(data.error || 'Erro ao criar paste');
+        await refreshUser();
+        return;
+      }
+
+      generatedLink = window.location.origin + (data.link || `/paste/${data.id}`);
+      generatedOutput.value = generatedLink;
+      outputArea.classList.remove('hidden');
+      copyBtn.classList.remove('hidden');
+      await refreshUser();
+    } catch (e) {
+      console.error(e);
+      showError('Erro de conexão ao criar paste.');
+    } finally {
+      startCreateBtn.disabled = false;
+      startCreateBtn.textContent = 'Gerar Paste (gasta 1 uso)';
+    }
   });
 
-  document.getElementById('copy-output').addEventListener('click', async ()=>{
-    const val = document.getElementById('generated-output').value;
-    await navigator.clipboard.writeText(val);
-    alert("Copiado!");
-  });
-
-  // Atualiza usos restantes
-  async function refreshUser(){
+  copyBtn.addEventListener('click', async ()=>{
+    if(!generatedLink) return;
     try {
-      const r = await fetch('/api/user', { credentials: 'include' });
-      const u = await r.json();
-      usesLeftEl.textContent = u?.user?.usesLeft ?? '—';
-    } catch(e){ usesLeftEl.textContent='—'; }
-  }
-  await refreshUser();
+      await navigator.clipboard.writeText(generatedLink);
+      copyBtn.textContent = 'Copiado ✅';
+      setTimeout(()=> copyBtn.textContent = 'Copiar', 1400);
+    } catch(e){
+      showError('Não foi possível copiar automaticamente.');
+    }
+  });
 
+  await refreshUser();
   setStep(1);
 })();
 </script>
