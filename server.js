@@ -21,9 +21,9 @@ const ADMIN_IDS = (process.env.ADMIN_IDS || "")
   .map((s) => s.trim())
   .filter(Boolean);
 
-// arquivo de persistência
 const dataFile = path.join(__dirname, "data.json");
 
+// ---------------- Persistência ----------------
 function readData() {
   if (!fs.existsSync(dataFile))
     return {
@@ -38,8 +38,6 @@ function readData() {
 function writeData(d) {
   fs.writeFileSync(dataFile, JSON.stringify(d, null, 2));
 }
-
-// garantir estrutura mínima
 (function ensureData() {
   const d = readData();
   d.users = d.users || {};
@@ -49,6 +47,7 @@ function writeData(d) {
   writeData(d);
 })();
 
+// ---------------- Middlewares ----------------
 app.use(express.static(path.join(__dirname, "public")));
 app.use("/admin", express.static(path.join(__dirname, "admin")));
 app.use(bodyParser.json());
@@ -60,7 +59,6 @@ app.use(
   })
 );
 
-// helper: usos por cargo
 function defaultUsesForRole(role) {
   if (!role) return 3;
   if (role === "Basic") return 10;
@@ -68,17 +66,22 @@ function defaultUsesForRole(role) {
   if (role === "Premium") return 55;
   return 3;
 }
+function isAdminId(id) {
+  return ADMIN_IDS.includes(String(id));
+}
+function ensureAuth(req, res, next) {
+  if (!req.session.user) return res.status(401).json({ error: "Not logged" });
+  next();
+}
 
-// reset diário
+// ---------------- Reset diário ----------------
 function resetDailyUses() {
   const data = readData();
   const today = new Date().toISOString().slice(0, 10);
   for (const uid in data.users) {
     const u = data.users[uid];
-    const role = (u.roles && u.roles[0]) || u.role || null;
-    const target = ADMIN_IDS.includes(uid)
-      ? Infinity
-      : defaultUsesForRole(role);
+    const role = (u.roles && u.roles[0]) || u.role || "Membro";
+    const target = isAdminId(uid) ? Infinity : defaultUsesForRole(role);
     if (u.lastReset !== today) {
       u.usesLeft = target;
       u.lastReset = today;
@@ -91,18 +94,8 @@ function resetDailyUses() {
 setInterval(resetDailyUses, 60 * 60 * 1000);
 resetDailyUses();
 
-// middlewares
-function ensureAuth(req, res, next) {
-  if (!req.session.user) return res.status(401).json({ error: "Not logged" });
-  next();
-}
-function isAdminId(id) {
-  return ADMIN_IDS.includes(String(id));
-}
-
-// ----------------- Discord OAuth -----------------
+// ---------------- Discord OAuth ----------------
 app.get("/auth/discord", (req, res) => res.redirect("/auth/login"));
-
 app.get("/auth/login", (req, res) => {
   if (!CLIENT_ID) return res.status(500).send("DISCORD_CLIENT_ID not set");
   const url = `https://discord.com/api/oauth2/authorize?client_id=${CLIENT_ID}&redirect_uri=${encodeURIComponent(
@@ -110,7 +103,6 @@ app.get("/auth/login", (req, res) => {
   )}&response_type=code&scope=identify`;
   res.redirect(url);
 });
-
 app.get("/auth/discord/callback", async (req, res) => {
   const code = req.query.code;
   if (!code) return res.redirect("/");
@@ -128,17 +120,14 @@ app.get("/auth/discord/callback", async (req, res) => {
       body: params.toString(),
     });
     const tokenData = await tokenRes.json();
-    if (!tokenData.access_token) {
-      console.error("token error", tokenData);
-      return res.redirect("/");
-    }
+    if (!tokenData.access_token) return res.redirect("/");
+
     const userRes = await fetch("https://discord.com/api/users/@me", {
       headers: { Authorization: `Bearer ${tokenData.access_token}` },
     });
     const u = await userRes.json();
-    const data = readData();
 
-    data.users = data.users || {};
+    const data = readData();
     if (!data.users[u.id]) {
       const role = "Membro";
       data.users[u.id] = {
@@ -165,32 +154,25 @@ app.get("/auth/discord/callback", async (req, res) => {
       username: u.username,
       avatar: data.users[u.id].avatar || null,
     };
-
     return res.redirect("/methods.html");
   } catch (err) {
     console.error("oauth callback error", err);
     return res.redirect("/");
   }
 });
-
 app.get("/auth/logout", (req, res) => {
   req.session.destroy(() => res.redirect("/"));
 });
 
-// ----------------- APIs -----------------
-
-// usuário logado
+// ---------------- APIs ----------------
 app.get("/api/user", ensureAuth, (req, res) => {
   const data = readData();
   const u = data.users[req.session.user.id];
   if (!u) return res.status(404).json({ error: "User unknown" });
-  return res.json({ user: u }); // <-- compatível com frontend
+  return res.json({ user: u });
 });
-
-// admin check
 app.get("/api/is-admin", ensureAuth, (req, res) => {
-  const id = req.session.user.id;
-  return res.json({ isAdmin: isAdminId(id) });
+  return res.json({ isAdmin: isAdminId(req.session.user.id) });
 });
 
 // builder use
@@ -199,12 +181,13 @@ app.post("/api/builder/use", ensureAuth, (req, res) => {
   const uid = req.session.user.id;
   const u = data.users[uid];
   if (!u) return res.status(404).json({ error: "User not found" });
-  if (u.blocked) return res.status(403).json({ error: "Você foi banido do Luma Methods - https://discord.gg/v2JdwRZktC" });
+  if (u.blocked)
+    return res.status(403).json({ error: "Você foi banido do Luma Methods" });
   if (!isAdminId(uid)) {
-    if (u.usesLeft <= 0) return res.status(403).json({ error: "Sem Usos Restantes -  Volte amanha!" });
+    if (u.usesLeft <= 0)
+      return res.status(403).json({ error: "Sem Usos Restantes - Volte amanhã!" });
     u.usesLeft -= 1;
   }
-  data.builders = data.builders || [];
   data.builders.push({
     id: Math.random().toString(36).slice(2, 9),
     user: uid,
@@ -220,29 +203,23 @@ app.post("/api/builder/use", ensureAuth, (req, res) => {
   return res.json({ ok: true, usesLeft: u.usesLeft });
 });
 
-// paste create
+// paste
 app.post("/api/create", ensureAuth, (req, res) => {
-  const text = (req.body.text || req.body.content || "").toString().trim();
+  const text = (req.body.text || req.body.content || "").trim();
   const password = (req.body.password || "").toString();
-  const redirect = (req.body.redirect || "").toString().trim() || null;
-
+  const redirect = (req.body.redirect || "").trim() || null;
   if (!text || !password)
     return res.status(400).json({ error: "text and password required" });
 
   const data = readData();
   const uid = req.session.user.id;
   const u = data.users[uid];
-  if (!u) return res.status(401).json({ error: "User not found" });
-
   if (!isAdminId(uid)) {
-    if (u.usesLeft === undefined)
-      u.usesLeft = defaultUsesForRole((u.roles && u.roles[0]) || null);
-    if (u.usesLeft <= 0) return res.status(403).json({ error: "Sem Usos Disponiveis - Volte Amanha" });
+    if (u.usesLeft <= 0)
+      return res.status(403).json({ error: "Sem Usos Disponíveis - Volte amanhã" });
     u.usesLeft -= 1;
   }
-
   const id = Math.random().toString(36).slice(2, 9);
-  data.pastes = data.pastes || {};
   data.pastes[id] = {
     id,
     text,
@@ -253,12 +230,9 @@ app.post("/api/create", ensureAuth, (req, res) => {
     createdAt: new Date().toISOString(),
     views: 0,
   };
-
   writeData(data);
   return res.json({ id, link: `/paste/${id}` });
 });
-
-// paste metadata
 app.get("/api/paste/:id/data", (req, res) => {
   const data = readData();
   const p = data.pastes[req.params.id];
@@ -269,195 +243,109 @@ app.get("/api/paste/:id/data", (req, res) => {
     views: p.views || 0,
     redirect: p.redirect || null,
     createdBy: p.createdBy,
-    createdByName: p.createdByName || null,
+    createdByName: p.createdByName,
   });
 });
-
-// verify password
 app.post("/api/paste/:id/access", (req, res) => {
   const data = readData();
   const p = data.pastes[req.params.id];
   if (!p) return res.status(404).json({ error: "Not found" });
-  const pass = (req.body.password || "").toString();
-  if (p.password !== pass)
+  if (p.password !== (req.body.password || ""))
     return res.status(403).json({ error: "Invalid password" });
   p.views = (p.views || 0) + 1;
   data.views = (data.views || 0) + 1;
   writeData(data);
   return res.json({ text: p.text, redirect: p.redirect || null });
 });
-
-// página pública de paste
 app.get("/paste/:id", (req, res) => {
-  res.sendFile(path.join(__dirname, "public", "paste.html"));
+  res.sendFile(path.join(__dirname, "public", "view.html"));
 });
 
-// ----------------- Admin APIs -----------------
-app.get("/api/admin/stats", ensureAuth, (req, res) => {
+// ---------------- Admin APIs ----------------
+app.get("/api/admin/users", ensureAuth, (req, res) => {
   if (!isAdminId(req.session.user.id))
-    return res.status(403).json({ error: "no" });
+    return res.status(403).json({ error: "Forbidden" });
   const data = readData();
-  const today = new Date();
-  const days = [];
-  const counts = [];
-  for (let i = 6; i >= 0; i--) {
-    const d = new Date(today);
-    d.setDate(today.getDate() - i);
-    const key = d.toISOString().slice(0, 10);
-    days.push(key);
-    const cnt = Object.values(data.users || {}).filter(
-      (u) => u.createdAt && u.createdAt.slice(0, 10) === key
-    ).length;
-    counts.push(cnt);
-  }
-  const totalPastes = Object.keys(data.pastes || {}).length;
-  const totalUsers = Object.keys(data.users || {}).length;
-  const buildersCount = (data.builders || []).length;
-  return res.json({
-    totalPastes,
-    totalUsers,
-    buildersCount,
-    views: data.views || 0,
-    days,
-    usersTimeseries: counts,
-    topPastes: Object.values(data.pastes || {})
-      .sort((a, b) => (b.views || 0) - (a.views || 0))
-      .slice(0, 10)
-      .map((p) => ({
-        id: p.id,
-        views: p.views || 0,
-        createdByName: p.createdByName || p.createdBy,
-      })),
-  });
+  res.json({ users: Object.values(data.users) });
 });
-
-// list all pastes
+app.post("/api/admin/block", ensureAuth, (req, res) => {
+  if (!isAdminId(req.session.user.id))
+    return res.status(403).json({ error: "Forbidden" });
+  const { id } = req.body;
+  const data = readData();
+  if (!data.users[id]) return res.status(404).json({ error: "Not found" });
+  data.users[id].blocked = true;
+  writeData(data);
+  res.json({ ok: true });
+});
+app.post("/api/admin/unblock", ensureAuth, (req, res) => {
+  if (!isAdminId(req.session.user.id))
+    return res.status(403).json({ error: "Forbidden" });
+  const { id } = req.body;
+  const data = readData();
+  if (!data.users[id]) return res.status(404).json({ error: "Not found" });
+  data.users[id].blocked = false;
+  writeData(data);
+  res.json({ ok: true });
+});
+app.post("/api/admin/adduses", ensureAuth, (req, res) => {
+  if (!isAdminId(req.session.user.id))
+    return res.status(403).json({ error: "Forbidden" });
+  const { id, amount } = req.body;
+  const data = readData();
+  if (!data.users[id]) return res.status(404).json({ error: "Not found" });
+  data.users[id].usesLeft = (data.users[id].usesLeft || 0) + Number(amount || 0);
+  writeData(data);
+  res.json({ ok: true });
+});
+app.post("/api/admin/role", ensureAuth, (req, res) => {
+  if (!isAdminId(req.session.user.id))
+    return res.status(403).json({ error: "Forbidden" });
+  const { id, role } = req.body;
+  const data = readData();
+  if (!data.users[id]) return res.status(404).json({ error: "Not found" });
+  data.users[id].roles = [role];
+  data.users[id].usesLeft = defaultUsesForRole(role);
+  writeData(data);
+  res.json({ ok: true });
+});
 app.get("/api/admin/pastes", ensureAuth, (req, res) => {
   if (!isAdminId(req.session.user.id))
-    return res.status(403).json({ error: "no" });
+    return res.status(403).json({ error: "Forbidden" });
   const data = readData();
-  const list = Object.values(data.pastes || {})
-    .map((p) => ({
-      id: p.id,
-      text: p.text,
-      password: p.password,
-      redirect: p.redirect,
-      createdAt: p.createdAt,
-      views: p.views || 0,
-      createdBy: p.createdBy,
-      createdByName: p.createdByName,
-    }))
-    .sort((a, b) => (b.views || 0) - (a.views || 0));
-  return res.json(list);
+  res.json({ pastes: Object.values(data.pastes) });
 });
-
-// delete paste
-app.delete("/api/admin/paste/:id", ensureAuth, (req, res) => {
+app.post("/api/admin/delete-paste", ensureAuth, (req, res) => {
   if (!isAdminId(req.session.user.id))
-    return res.status(403).json({ error: "no" });
+    return res.status(403).json({ error: "Forbidden" });
+  const { id } = req.body;
   const data = readData();
-  if (!data.pastes[req.params.id])
-    return res.status(404).json({ error: "not found" });
-  delete data.pastes[req.params.id];
+  delete data.pastes[id];
   writeData(data);
-  return res.json({ ok: true });
+  res.json({ ok: true });
 });
-
-// list users
-app.get("/api/users", ensureAuth, (req, res) => {
-  if (!isAdminId(req.session.user.id))
-    return res.status(403).json({ error: "no" });
-  const data = readData();
-  const users = Object.values(data.users || {}).map((u) => ({
-    id: u.id,
-    username: u.username,
-    avatar: u.avatar,
-    usesLeft: u.usesLeft,
-    roles: u.roles || [],
-    blocked: !!u.blocked,
-    createdAt: u.createdAt,
-  }));
-  return res.json(users);
-});
-
-// block/unblock user
-app.post("/api/admin/block/:id", ensureAuth, (req, res) => {
-  if (!isAdminId(req.session.user.id))
-    return res.status(403).json({ error: "no" });
-  const target = req.params.id;
-  const data = readData();
-  if (!data.users[target]) return res.status(404).json({ error: "not found" });
-  data.users[target].blocked = !data.users[target].blocked;
-  writeData(data);
-  return res.json({ id: target, blocked: data.users[target].blocked });
-});
-
-// add uses
-app.post("/api/admin/adduses/:id", ensureAuth, (req, res) => {
-  if (!isAdminId(req.session.user.id))
-    return res.status(403).json({ error: "no" });
-  const id = req.params.id;
-  const amount = parseInt(req.body.amount || 0);
-  if (!amount || amount <= 0)
-    return res.status(400).json({ error: "invalid amount" });
-  const data = readData();
-  data.users[id] = data.users[id] || {
-    id,
-    username: "unknown",
-    usesLeft: 0,
-    roles: ["Membro"],
-    createdAt: new Date().toISOString(),
-  };
-  data.users[id].usesLeft = (data.users[id].usesLeft || 0) + amount;
-  writeData(data);
-  return res.json({ id, usesLeft: data.users[id].usesLeft });
-});
-
-// set role
-app.post("/api/admin/role/:id", ensureAuth, (req, res) => {
-  if (!isAdminId(req.session.user.id))
-    return res.status(403).json({ error: "no" });
-  const id = req.params.id;
-  const role = (req.body.role || "").toString();
-  if (!["Membro", "Basic", "Plus", "Premium"].includes(role))
-    return res.status(400).json({ error: "invalid role" });
-  const data = readData();
-  data.users[id] = data.users[id] || {
-    id,
-    username: "unknown",
-    usesLeft: defaultUsesForRole(role),
-    roles: [role],
-    createdAt: new Date().toISOString(),
-  };
-  data.users[id].roles = [role];
-  const target = defaultUsesForRole(role);
-  if (!isAdminId(id)) {
-    if (!data.users[id].usesLeft || data.users[id].usesLeft < target)
-      data.users[id].usesLeft = target;
-  } else {
-    data.users[id].usesLeft = Infinity;
-  }
-  writeData(data);
-  return res.json({
-    id,
-    role: data.users[id].roles,
-    usesLeft: data.users[id].usesLeft,
-  });
-});
-
-// builder summary
 app.get("/api/admin/builders", ensureAuth, (req, res) => {
   if (!isAdminId(req.session.user.id))
-    return res.status(403).json({ error: "no" });
+    return res.status(403).json({ error: "Forbidden" });
   const data = readData();
-  const byPlatform = {};
-  const byGame = {};
-  (data.builders || []).forEach((b) => {
-    const p = b.platform || b.mode || "Roblox";
-    byPlatform[p] = (byPlatform[p] || 0) + 1;
-    if (b.game) byGame[b.game] = (byGame[b.game] || 0) + 1;
+  res.json({ builders: data.builders || [] });
+});
+app.get("/api/admin/stats", ensureAuth, (req, res) => {
+  if (!isAdminId(req.session.user.id))
+    return res.status(403).json({ error: "Forbidden" });
+  const data = readData();
+  const totalUsers = Object.keys(data.users).length;
+  const totalPastes = Object.keys(data.pastes).length;
+  const totalBuilders = (data.builders || []).length;
+  const totalViews = data.views || 0;
+  res.json({
+    totalUsers,
+    totalPastes,
+    totalBuilders,
+    totalViews,
   });
-  return res.json({ logs: data.builders || [], byPlatform, byGame });
 });
 
-app.listen(PORT, () => console.log("✅ Server listening on", PORT));
+app.listen(PORT, () =>
+  console.log(`✅ Server rodando em http://localhost:${PORT}`)
+);
