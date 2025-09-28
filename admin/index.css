@@ -1,0 +1,6 @@
+@import "https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css";
+
+/* Extra opcional */
+body {
+  font-family: system-ui, sans-serif;
+}
