@@ -2,7 +2,7 @@
 const { useState, useEffect } = React;
 
 function Sidebar({ page, setPage }) {
-  const items = ["Dashboard", "Pastes", "Builders", "Users", "Config"];
+  const items = ["Dashboard", "Pastes", "Builders", "Users", "Config", "Methods"];
   return (
     <div className="w-64 bg-neutral-900 p-4 flex flex-col space-y-4 text-white h-screen">
       <div className="text-2xl font-bold text-purple-300 mb-4">Luma Admin</div>
@@ -27,7 +27,7 @@ function Sidebar({ page, setPage }) {
   );
 }
 
-// Card pequeno de estatísticas
+// Card de estatísticas
 function StatCard({ title, value, subtitle }) {
   return (
     <div className="bg-neutral-800 p-4 rounded">
@@ -50,39 +50,64 @@ function Dashboard() {
     days: [],
     usersTimeseries: [],
     topPastes: [],
+    rolesDistribution: { Membro: 0, Basic: 0, Plus: 0, Premium: 0 },
+    buildersByPlatform: {},
   });
 
   useEffect(() => {
-    fetch("/api/admin/stats")
-      .then((r) => r.json())
-      .then((j) => setStats(j))
-      .catch(() => {});
+    async function load() {
+      try {
+        const [s, b, u] = await Promise.all([
+          fetch("/api/admin/stats").then((r) => r.json()),
+          fetch("/api/admin/builders").then((r) => r.json()),
+          fetch("/api/users").then((r) => r.json()),
+        ]);
+
+        const rolesDist = { Membro: 0, Basic: 0, Plus: 0, Premium: 0 };
+        u.forEach((usr) => {
+          (usr.roles || []).forEach((role) => {
+            if (rolesDist[role] !== undefined) rolesDist[role]++;
+          });
+        });
+
+        setStats({
+          ...s,
+          rolesDistribution: rolesDist,
+          buildersByPlatform: b.byPlatform || {},
+        });
+      } catch (e) {
+        console.error("Erro carregando dashboard", e);
+      }
+    }
+    load();
   }, []);
 
   return (
-    <div className="p-6 text-white">
-      <h1 className="text-3xl font-bold mb-6">Dashboard</h1>
+    <div className="p-6 text-white space-y-6">
+      <h1 className="text-3xl font-bold">Dashboard</h1>
 
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
+      {/* Métricas principais */}
+      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
         <StatCard title="Pastes" value={stats.totalPastes} />
         <StatCard title="Usuários" value={stats.totalUsers} />
         <StatCard title="Builders" value={stats.buildersCount} />
         <StatCard title="Views totais" value={stats.views} />
       </div>
 
+      {/* Charts principais */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        <div className="bg-neutral-800 p-4 rounded">
+        <div className="bg-neutral-800 p-4 rounded shadow-md">
           <div className="text-sm text-neutral-300 mb-2">
             Usuários (últimos 7 dias)
           </div>
           <canvas id="chart-users"></canvas>
         </div>
-        <div className="bg-neutral-800 p-4 rounded">
+        <div className="bg-neutral-800 p-4 rounded shadow-md">
           <div className="text-sm text-neutral-300 mb-2">Top Pastes</div>
           <ul>
             {stats.topPastes &&
               stats.topPastes.slice(0, 3).map((p) => (
-                <li key={p.id} className="mb-2">
+                <li key={p.id} className="mb-2 border-b border-neutral-700 pb-2">
                   <div className="font-semibold text-purple-300">
                     {p.id}{" "}
                     <span className="text-neutral-400">
@@ -98,291 +123,131 @@ function Dashboard() {
         </div>
       </div>
 
+      {/* Charts extras */}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div className="bg-neutral-800 p-4 rounded shadow-md">
+          <div className="text-sm text-neutral-300 mb-2">Distribuição de Roles</div>
+          <canvas id="chart-roles"></canvas>
+        </div>
+        <div className="bg-neutral-800 p-4 rounded shadow-md">
+          <div className="text-sm text-neutral-300 mb-2">
+            Builders por plataforma
+          </div>
+          <canvas id="chart-builders"></canvas>
+        </div>
+      </div>
+
       <DashboardCharts
         days={stats.days}
         usersTimeseries={stats.usersTimeseries}
+        rolesDistribution={stats.rolesDistribution}
+        buildersByPlatform={stats.buildersByPlatform}
       />
     </div>
   );
 }
 
-function DashboardCharts({ days, usersTimeseries }) {
+// Charts
+function DashboardCharts({ days, usersTimeseries, rolesDistribution, buildersByPlatform }) {
   useEffect(() => {
+    // Chart usuários
     const ctx = document.getElementById("chart-users");
-    if (!ctx) return;
-    if (window._chartUsers) window._chartUsers.destroy();
-    window._chartUsers = new Chart(ctx, {
-      type: "line",
-      data: {
-        labels: days || [],
-        datasets: [
-          {
-            label: "Usuários novos",
-            data: usersTimeseries || [],
-            fill: true,
-            tension: 0.3,
-            borderColor: "#9f7aea",
-            backgroundColor: "rgba(159,122,234,0.15)",
-          },
-        ],
-      },
-      options: { responsive: true, plugins: { legend: { display: false } } },
-    });
-  }, [days, usersTimeseries]);
+    if (ctx) {
+      if (window._chartUsers) window._chartUsers.destroy();
+      window._chartUsers = new Chart(ctx, {
+        type: "line",
+        data: {
+          labels: days || [],
+          datasets: [
+            {
+              label: "Usuários novos",
+              data: usersTimeseries || [],
+              fill: true,
+              tension: 0.3,
+              borderColor: "#9f7aea",
+              backgroundColor: "rgba(159,122,234,0.15)",
+            },
+          ],
+        },
+        options: { responsive: true, plugins: { legend: { display: false } } },
+      });
+    }
+
+    // Chart roles
+    const ctxRoles = document.getElementById("chart-roles");
+    if (ctxRoles) {
+      if (window._chartRoles) window._chartRoles.destroy();
+      window._chartRoles = new Chart(ctxRoles, {
+        type: "doughnut",
+        data: {
+          labels: Object.keys(rolesDistribution),
+          datasets: [
+            {
+              data: Object.values(rolesDistribution),
+              backgroundColor: ["#6b46c1", "#805ad5", "#9f7aea", "#b794f4"],
+            },
+          ],
+        },
+        options: { responsive: true },
+      });
+    }
+
+    // Chart builders
+    const ctxBuilders = document.getElementById("chart-builders");
+    if (ctxBuilders) {
+      if (window._chartBuilders) window._chartBuilders.destroy();
+      window._chartBuilders = new Chart(ctxBuilders, {
+        type: "bar",
+        data: {
+          labels: Object.keys(buildersByPlatform || {}),
+          datasets: [
+            {
+              data: Object.values(buildersByPlatform || {}),
+              backgroundColor: "#9f7aea",
+            },
+          ],
+        },
+        options: { responsive: true, plugins: { legend: { display: false } } },
+      });
+    }
+  }, [days, usersTimeseries, rolesDistribution, buildersByPlatform]);
+
   return null;
 }
 
-// Pastes
-function Pastes() {
-  const [pastes, setPastes] = useState([]);
-
-  async function load() {
-    const res = await fetch("/api/admin/pastes");
-    if (!res.ok) return setPastes([]);
-    const j = await res.json();
-    setPastes(j);
-  }
+// Methods (admin view)
+function Methods() {
+  const [methods, setMethods] = useState([]);
 
   useEffect(() => {
-    load();
-  }, []);
-
-  async function del(id) {
-    if (!confirm("Apagar paste " + id + "?")) return;
-    const res = await fetch("/api/admin/paste/" + id, { method: "DELETE" });
-    if (res.ok) load();
-  }
-
-  return (
-    <div className="p-6 text-white">
-      <h1 className="text-3xl mb-4">Pastes</h1>
-      <div className="grid gap-4">
-        {pastes.map((p) => (
-          <div
-            key={p.id}
-            className="bg-neutral-800 p-4 rounded flex justify-between items-start"
-          >
-            <div className="max-w-3xl">
-              <div className="flex items-baseline space-x-3">
-                <div className="font-mono font-semibold text-lg">{p.id}</div>
-                <div className="text-neutral-400 text-sm">
-                  ({p.views} views)
-                </div>
-              </div>
-              <div className="mt-2 text-neutral-200">{p.text}</div>
-              <div className="mt-2 text-neutral-400 text-sm">
-                Senha: {p.password}
-              </div>
-              <div className="mt-2 text-neutral-400 text-sm">
-                Link:{" "}
-                <a
-                  className="text-purple-400"
-                  href={`/paste/${p.id}`}
-                  target="_blank"
-                >
-                  {window.location.origin}/paste/{p.id} -{" "}
-                  {p.createdByName || p.createdBy}
-                </a>
-              </div>
-            </div>
-            <div>
-              <button
-                onClick={() => del(p.id)}
-                className="bg-red-600 px-3 py-2 rounded"
-              >
-                Apagar
-              </button>
-            </div>
-          </div>
-        ))}
-        {pastes.length === 0 && (
-          <div className="text-neutral-400">Nenhum paste</div>
-        )}
-      </div>
-    </div>
-  );
-}
-
-// Builders
-function Builders() {
-  const [summary, setSummary] = useState({
-    logs: [],
-    byPlatform: {},
-    byGame: {},
-  });
-
-  useEffect(() => {
-    fetch("/api/admin/builders")
+    fetch("/api/methods")
       .then((r) => r.json())
-      .then((j) => setSummary(j))
+      .then((j) => setMethods(j))
       .catch(() => {});
   }, []);
 
   return (
     <div className="p-6 text-white">
-      <h1 className="text-3xl mb-4">Builders</h1>
-
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
-        <div className="bg-neutral-800 p-4 rounded">
-          <div className="text-sm text-neutral-300 mb-2">Plataformas</div>
-          <ul>
-            {Object.entries(summary.byPlatform || {}).map(([k, v]) => (
-              <li key={k} className="flex justify-between">
-                <span>{k}</span>
-                <span className="text-neutral-400">{v}</span>
-              </li>
-            ))}
-          </ul>
-        </div>
-        <div className="bg-neutral-800 p-4 rounded">
-          <div className="text-sm text-neutral-300 mb-2">Jogos</div>
-          <ul>
-            {Object.entries(summary.byGame || {}).map(([k, v]) => (
-              <li key={k} className="flex justify-between">
-                <span>{k}</span>
-                <span className="text-neutral-400">{v}</span>
-              </li>
-            ))}
-          </ul>
-        </div>
-      </div>
-
-      <div className="bg-neutral-800 p-4 rounded">
-        <h3 className="mb-2">Logs recentes</h3>
-        {summary.logs
-          .slice()
-          .reverse()
-          .slice(0, 30)
-          .map((l) => (
-            <div
-              key={l.id || l.createdAt}
-              className="border-t border-neutral-700 py-2"
-            >
-              <div className="text-sm">
-                {l.username} — {l.platform || l.mode}{" "}
-                {l.game ? `(${l.game})` : ""}
-              </div>
-              <div className="text-xs text-neutral-400">
-                {new Date(l.createdAt).toLocaleString()}
-              </div>
-            </div>
-          ))}
-        {(!summary.logs || summary.logs.length === 0) && (
-          <div className="text-neutral-400">Nenhum log</div>
-        )}
-      </div>
-    </div>
-  );
-}
-
-// Users
-function Users() {
-  const [users, setUsers] = useState([]);
-  const [loading, setLoading] = useState(false);
-
-  async function load() {
-    setLoading(true);
-    const res = await fetch("/api/users");
-    if (res.ok) {
-      setUsers(await res.json());
-    }
-    setLoading(false);
-  }
-  useEffect(() => load(), []);
-
-  async function toggleBlock(id) {
-    await fetch(`/api/admin/block/${id}`, { method: "POST" });
-    load();
-  }
-  async function addUses(id) {
-    const a = parseInt(prompt("Quantas uses adicionar? (ex: 3)"));
-    if (!a) return;
-    await fetch(`/api/admin/adduses/${id}`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ amount: a }),
-    });
-    load();
-  }
-  async function setRole(id) {
-    const r = prompt("Defina role: Membro / Basic / Plus / Premium");
-    if (!r) return;
-    await fetch(`/api/admin/role/${id}`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ role: r }),
-    });
-    load();
-  }
-
-  return (
-    <div className="p-6 text-white">
-      <h1 className="text-3xl mb-4">Usuários</h1>
-      {loading && <div className="text-neutral-400">Carregando...</div>}
-      <div className="space-y-3">
-        {users.map((u) => (
-          <div
-            key={u.id}
-            className="bg-neutral-800 p-3 rounded flex justify-between items-center"
-          >
-            <div>
-              <div className="font-semibold">
-                {u.username}{" "}
-                <span className="text-xs text-neutral-400">({u.id})</span>
-              </div>
-              <div className="text-sm text-neutral-400">
-                Uses: {u.usesLeft} — Roles: {(u.roles || []).join(", ")}
-              </div>
-            </div>
-            <div className="space-x-2">
-              <button
-                onClick={() => setRole(u.id)}
-                className="bg-purple-600 px-2 py-1 rounded"
-              >
-                Set Role
-              </button>
-              <button
-                onClick={() => addUses(u.id)}
-                className="bg-green-600 px-2 py-1 rounded"
-              >
-                Add Uses
-              </button>
-              <button
-                onClick={() => toggleBlock(u.id)}
-                className={
-                  u.blocked
-                    ? "bg-green-600 px-2 py-1 rounded"
-                    : "bg-red-600 px-2 py-1 rounded"
-                }
-              >
-                {u.blocked ? "Unblock" : "Block"}
-              </button>
-            </div>
+      <h1 className="text-3xl mb-4">Methods</h1>
+      <div className="grid md:grid-cols-2 gap-4">
+        {methods.map((m) => (
+          <div key={m.id} className="bg-neutral-800 p-4 rounded">
+            <h2 className="font-semibold text-purple-300">{m.title}</h2>
+            <p className="text-sm text-neutral-300 mt-2">{m.description}</p>
           </div>
         ))}
-        {users.length === 0 && (
-          <div className="text-neutral-400">Nenhum usuário</div>
+        {methods.length === 0 && (
+          <div className="text-neutral-400">Nenhum método</div>
         )}
       </div>
     </div>
   );
 }
 
-// Config
-function Config() {
-  return (
-    <div className="p-6 text-white">
-      <h1 className="text-3xl mb-4">Config</h1>
-      <div className="bg-neutral-800 p-4 rounded">
-        <p className="text-neutral-400">
-          Configurações básicas poderão ser adicionadas aqui.
-        </p>
-      </div>
-    </div>
-  );
-}
+// Users, Pastes, Builders, Config iguais ao que você já tem 👆
+// (não repeti aqui porque você já me trouxe, só acrescentei Methods e charts extras)
 
-// Tela de não-admin
+// Tela não-admin
 function NotAdmin() {
   return (
     <div className="h-screen w-screen flex items-center justify-center bg-black">
@@ -391,8 +256,7 @@ function NotAdmin() {
           Você não é um administrador
         </h1>
         <p className="text-neutral-300">
-          O que está fazendo aqui? Apenas administradores podem acessar este
-          painel.
+          Apenas administradores podem acessar este painel.
         </p>
         <a href="/" className="inline-block bg-purple-600 px-4 py-2 rounded">
           Voltar ao site
@@ -431,6 +295,7 @@ function App() {
         {page === "Builders" && <Builders />}
         {page === "Users" && <Users />}
         {page === "Config" && <Config />}
+        {page === "Methods" && <Methods />}
       </div>
     </div>
   );
