@@ -3,82 +3,87 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Luma Shortner</title>
+  <title>Criar Paste</title>
   <script src="https://cdn.tailwindcss.com"></script>
 </head>
-<body class="bg-neutral-900 text-white flex items-center justify-center min-h-screen">
+<body class="bg-gray-900 text-white min-h-screen flex flex-col items-center justify-center p-6">
+  <div class="w-full max-w-lg bg-gray-800 rounded-xl shadow-lg p-6">
+    <h1 class="text-2xl font-bold text-center mb-4">Criar Paste</h1>
 
-  <div class="bg-neutral-800 p-6 rounded-lg shadow-lg w-full max-w-lg space-y-4">
-    <h1 class="text-2xl font-bold text-purple-400 mb-4">Luma Shortner</h1>
+    <!-- Form -->
+    <form id="pasteForm" class="space-y-4">
+      <!-- Conteúdo -->
+      <div>
+        <label class="block mb-1 font-medium">Conteúdo</label>
+        <textarea id="text" class="w-full p-2 rounded bg-gray-700 text-white" rows="5" placeholder="Digite seu texto aqui..." required></textarea>
+      </div>
 
-    <!-- Conteúdo -->
-    <div>
-      <label class="block text-sm mb-1">Conteúdo (obrigatório)</label>
-      <textarea id="content" class="w-full p-2 rounded bg-neutral-900 border border-neutral-700" rows="4" placeholder="Digite o conteúdo aqui..."></textarea>
-    </div>
+      <!-- Senha -->
+      <div>
+        <label class="block mb-1 font-medium">Senha</label>
+        <input id="password" type="password" class="w-full p-2 rounded bg-gray-700 text-white" placeholder="Digite uma senha" required />
+      </div>
 
-    <!-- Senha -->
-    <div>
-      <label class="block text-sm mb-1">Senha (obrigatório)</label>
-      <input id="password" type="password" class="w-full p-2 rounded bg-neutral-900 border border-neutral-700" placeholder="Digite uma senha..." />
-    </div>
+      <!-- Redirecionamento -->
+      <div>
+        <label class="block mb-1 font-medium">URL de Redirecionamento (opcional)</label>
+        <input id="redirect" type="url" class="w-full p-2 rounded bg-gray-700 text-white" placeholder="https://exemplo.com" />
+      </div>
 
-    <!-- Redirecionamento -->
-    <div>
-      <label class="block text-sm mb-1">Link de Redirecionamento (opcional)</label>
-      <input id="redirect" type="text" class="w-full p-2 rounded bg-neutral-900 border border-neutral-700" placeholder="https://exemplo.com" />
-    </div>
+      <!-- Botão -->
+      <button type="submit" class="w-full bg-blue-600 hover:bg-blue-700 p-2 rounded font-bold">
+        Gerar Paste
+      </button>
+    </form>
 
-    <!-- Botão -->
-    <div class="flex space-x-2">
-      <button id="generateBtn" class="bg-purple-600 hover:bg-purple-700 px-4 py-2 rounded font-bold">
-        Gerar Link
+    <!-- Resultado -->
+    <div id="result" class="mt-6 hidden text-center">
+      <p class="mb-2">✅ Paste criado com sucesso!</p>
+      <input id="pasteLink" readonly class="w-full p-2 rounded bg-gray-700 text-white text-center" />
+      <button onclick="copyLink()" class="mt-2 bg-green-600 hover:bg-green-700 px-4 py-2 rounded">
+        Copiar Link
       </button>
     </div>
-
-    <!-- Output -->
-    <div id="output" class="mt-4 hidden bg-neutral-900 p-3 rounded border border-neutral-700"></div>
   </div>
 
   <script>
-    document.getElementById("generateBtn").addEventListener("click", async () => {
-      const content = document.getElementById("content").value.trim();
+    const form = document.getElementById("pasteForm");
+    const resultDiv = document.getElementById("result");
+    const pasteLink = document.getElementById("pasteLink");
+
+    form.addEventListener("submit", async (e) => {
+      e.preventDefault();
+
+      const text = document.getElementById("text").value.trim();
       const password = document.getElementById("password").value.trim();
       const redirect = document.getElementById("redirect").value.trim();
-
-      if (!content || !password) {
-        alert("Preencha o conteúdo e a senha!");
-        return;
-      }
 
       try {
         const res = await fetch("/api/create", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ content, password, redirect })
+          body: JSON.stringify({ text, password, redirect })
         });
 
-        if (!res.ok) {
-          const err = await res.json();
-          alert("Erro: " + (err.error || "Falha ao gerar link"));
-          return;
-        }
-
         const data = await res.json();
-        const link = window.location.origin + "/p/" + data.id;
 
-        const outDiv = document.getElementById("output");
-        outDiv.innerHTML = `
-          <p class="mb-2">Seu link foi gerado:</p>
-          <a href="${link}" target="_blank" class="text-purple-400 underline">${link}</a>
-          <button class="ml-2 bg-purple-600 px-2 py-1 rounded" onclick="navigator.clipboard.writeText('${link}')">Copiar</button>
-        `;
-        outDiv.classList.remove("hidden");
-
+        if (data.error) {
+          alert("Erro: " + data.error);
+        } else {
+          pasteLink.value = window.location.origin + "/paste/" + data.id;
+          resultDiv.classList.remove("hidden");
+        }
       } catch (err) {
-        alert("Erro de conexão: " + err.message);
+        alert("Erro ao criar paste!");
+        console.error(err);
       }
     });
+
+    function copyLink() {
+      pasteLink.select();
+      document.execCommand("copy");
+      alert("Link copiado!");
+    }
   </script>
 </body>
 </html>
