@@ -1,169 +1,249 @@
+// server.js
 const express = require("express");
-const session = require("express-session");
 const fetch = require("node-fetch");
+const cookieParser = require("cookie-parser");
+const fs = require("fs");
 const path = require("path");
-const bodyParser = require("body-parser");
+const session = require("express-session");
 
 const app = express();
 const PORT = process.env.PORT || 3000;
 
-// middlewares
-app.use(bodyParser.json());
-app.use(bodyParser.urlencoded({ extended: true }));
+// =======================
+// CONFIGURAÇÕES
+// =======================
+const CLIENT_ID = process.env.CLIENT_ID;
+const CLIENT_SECRET = process.env.CLIENT_SECRET;
+const REDIRECT_URI = process.env.REDIRECT_URI || "http://localhost:3000/callback";
+const ADMIN_IDS = (process.env.ADMIN_IDS || "").split(",");
 
-// sessão
+const DATA_FILE = path.join(__dirname, "data.json");
+
+// =======================
+// HELPERS DE DATA
+// =======================
+function readData() {
+  try {
+    return JSON.parse(fs.readFileSync(DATA_FILE, "utf8"));
+  } catch {
+    return { users: {}, pastes: {} };
+  }
+}
+function writeData(data) {
+  fs.writeFileSync(DATA_FILE, JSON.stringify(data, null, 2));
+}
+
+// reset diário de usos
+setInterval(() => {
+  const data = readData();
+  const today = new Date().toISOString().slice(0, 10);
+  if (data.lastReset !== today) {
+    for (const uid in data.users) {
+      data.users[uid].usesLeft = 3;
+    }
+    data.lastReset = today;
+    writeData(data);
+    console.log("Usos resetados:", today);
+  }
+}, 60 * 1000);
+
+// =======================
+// MIDDLEWARES
+// =======================
+app.use(express.json());
+app.use(cookieParser());
 app.use(
   session({
-    secret: process.env.SESSION_SECRET || "supersecret",
+    secret: process.env.SESSION_SECRET || "secret",
     resave: false,
     saveUninitialized: false,
   })
 );
 
-// servir pastas estáticas
-app.use(express.static(path.join(__dirname, "public")));
+// static: public e admin
+app.use("/public", express.static(path.join(__dirname, "public")));
 app.use("/admin", express.static(path.join(__dirname, "admin")));
 
-// memória temporária
-let users = {}; // {id: {name, avatar, usesLeft, role}}
-let pastes = {}; // {id: {content, password, createdAt, views}}
+// =======================
+// AUTH
+// =======================
+function ensureAuth(req, res, next) {
+  if (req.session.user) return next();
+  return res.status(401).json({ error: "Não autorizado" });
+}
 
-// reset diário às 00:00 → renova usos
-setInterval(() => {
-  Object.keys(users).forEach((id) => {
-    users[id].usesLeft = 3;
-  });
-  console.log("Usos resetados!");
-}, 24 * 60 * 60 * 1000);
+app.get("/", (req, res) => {
+  res.sendFile(path.join(__dirname, "public", "index.html"));
+});
 
-// rota de login Discord
-app.get("/auth/discord", (req, res) => {
-  const redirect = encodeURIComponent(process.env.DISCORD_REDIRECT_URI);
-  const url = `https://discord.com/api/oauth2/authorize?client_id=${process.env.DISCORD_CLIENT_ID}&redirect_uri=${redirect}&response_type=code&scope=identify`;
+// login com discord
+app.get("/login", (req, res) => {
+  const url =
+    `https://discord.com/oauth2/authorize?client_id=${CLIENT_ID}` +
+    `&redirect_uri=${encodeURIComponent(REDIRECT_URI)}` +
+    `&response_type=code&scope=identify`;
   res.redirect(url);
 });
 
-// callback do discord
-app.get("/auth/discord/callback", async (req, res) => {
+app.get("/callback", async (req, res) => {
   const code = req.query.code;
-  if (!code) return res.redirect("/index.html");
+  if (!code) return res.status(400).send("Code ausente");
 
   try {
-    const params = new URLSearchParams();
-    params.append("client_id", process.env.DISCORD_CLIENT_ID);
-    params.append("client_secret", process.env.DISCORD_CLIENT_SECRET);
-    params.append("grant_type", "authorization_code");
-    params.append("redirect_uri", process.env.DISCORD_REDIRECT_URI);
-    params.append("code", code);
-    params.append("scope", "identify");
-
     const tokenRes = await fetch("https://discord.com/api/oauth2/token", {
       method: "POST",
-      body: params,
       headers: { "Content-Type": "application/x-www-form-urlencoded" },
+      body: new URLSearchParams({
+        client_id: CLIENT_ID,
+        client_secret: CLIENT_SECRET,
+        grant_type: "authorization_code",
+        code,
+        redirect_uri: REDIRECT_URI,
+      }),
     });
-    const tokenData = await tokenRes.json();
+    const token = await tokenRes.json();
+    if (!token.access_token) return res.status(400).json(token);
 
     const userRes = await fetch("https://discord.com/api/users/@me", {
-      headers: { Authorization: `Bearer ${tokenData.access_token}` },
+      headers: { Authorization: `Bearer ${token.access_token}` },
     });
-    const userData = await userRes.json();
+    const user = await userRes.json();
 
-    req.session.user = {
-      id: userData.id,
-      name: userData.username,
-      avatar: `https://cdn.discordapp.com/avatars/${userData.id}/${userData.avatar}.png`,
-      role: userData.id === process.env.ADMIN_ID ? "admin" : "user",
-    };
-
-    if (!users[userData.id]) {
-      users[userData.id] = {
-        id: userData.id,
-        name: userData.username,
-        avatar: `https://cdn.discordapp.com/avatars/${userData.id}/${userData.avatar}.png`,
-        role: userData.id === process.env.ADMIN_ID ? "admin" : "user",
+    const data = readData();
+    if (!data.users[user.id]) {
+      data.users[user.id] = {
+        id: user.id,
+        username: `${user.username}#${user.discriminator}`,
         usesLeft: 3,
       };
+      writeData(data);
     }
 
-    if (req.session.user.role === "admin") {
+    req.session.user = user;
+
+    if (ADMIN_IDS.includes(user.id)) {
       return res.redirect("/admin/index.html");
     } else {
-      return res.redirect("/methods.html");
+      return res.redirect("/public/methods.html");
     }
   } catch (err) {
-    console.error("Erro no login:", err);
-    return res.redirect("/index.html");
+    console.error("Erro callback:", err);
+    res.status(500).send("Erro interno");
   }
 });
 
-// API: informações do usuário logado
-app.get("/api/user", (req, res) => {
-  if (!req.session.user) return res.json({ user: null });
-  res.json({ user: users[req.session.user.id] });
+// logout
+app.get("/logout", (req, res) => {
+  req.session.destroy(() => {
+    res.redirect("/");
+  });
 });
 
-// API: admin check
-app.get("/api/is-admin", (req, res) => {
-  if (!req.session.user) return res.json({ admin: false });
-  res.json({ admin: req.session.user.role === "admin" });
+// =======================
+// API USER
+// =======================
+app.get("/api/user", ensureAuth, (req, res) => {
+  const data = readData();
+  const uid = req.session.user.id;
+  res.json(data.users[uid]);
 });
 
-// API: criar paste (shortner)
-app.post("/api/paste", (req, res) => {
-  if (!req.session.user) return res.status(401).json({ error: "Não logado" });
+// =======================
+// API PASTES
+// =======================
+app.post("/api/create", ensureAuth, (req, res) => {
+  const text = (req.body.text || req.body.content || "").toString().trim();
+  const password = (req.body.password || "").toString();
+  const redirect = (req.body.redirect || req.body.url || null);
 
-  const user = users[req.session.user.id];
-  if (user.usesLeft <= 0) {
-    return res.status(403).json({ error: "Sem usos restantes" });
+  if (!text || !password) {
+    return res
+      .status(400)
+      .json({ error: "Faltando dados: text/content e password" });
   }
 
-  const { content, password, redirect } = req.body;
-  if (!content || !password) {
-    return res.status(400).json({ error: "Conteúdo e senha são obrigatórios" });
+  const data = readData();
+  const uid = req.session.user.id;
+
+  if (!ADMIN_IDS.includes(uid)) {
+    if (data.users[uid].usesLeft <= 0) {
+      return res.status(403).json({ error: "Sem usos restantes" });
+    }
+    data.users[uid].usesLeft -= 1;
   }
 
-  const id = Math.random().toString(36).substring(2, 8);
-  pastes[id] = {
+  const id = Math.random().toString(36).slice(2, 9);
+  data.pastes[id] = {
     id,
-    content,
+    text,
     password,
-    redirect: redirect || null,
+    redirect,
+    createdBy: uid,
     createdAt: new Date().toISOString(),
     views: 0,
   };
+  writeData(data);
 
-  user.usesLeft--;
-
-  res.json({ link: `/paste/${id}` });
+  res.json({ id, link: `/paste/${id}` });
 });
 
-// API: acessar paste
-app.post("/api/paste/:id", (req, res) => {
-  const { id } = req.params;
-  const { password } = req.body;
+// compatibilidade
+app.post("/api/paste", ensureAuth, (req, res) => {
+  req.url = "/api/create";
+  app.handle(req, res);
+});
 
-  const paste = pastes[id];
-  if (!paste) return res.status(404).json({ error: "Paste não encontrado" });
-  if (paste.password !== password)
-    return res.status(403).json({ error: "Senha incorreta" });
+// abrir paste
+app.get("/paste/:id", (req, res) => {
+  const data = readData();
+  const paste = data.pastes[req.params.id];
+  if (!paste) return res.status(404).send("Paste não encontrado");
 
-  pastes[id].views++;
+  res.send(`
+    <html>
+      <head><title>Paste ${paste.id}</title></head>
+      <body style="font-family: sans-serif; background: #111; color: #eee;">
+        <h2>Paste protegido</h2>
+        <form method="POST" action="/paste/${paste.id}/view">
+          <input type="password" name="password" placeholder="Senha" required />
+          <button type="submit">Ver Conteúdo</button>
+        </form>
+      </body>
+    </html>
+  `);
+});
+
+// ver paste
+app.use(express.urlencoded({ extended: true }));
+app.post("/paste/:id/view", (req, res) => {
+  const data = readData();
+  const paste = data.pastes[req.params.id];
+  if (!paste) return res.status(404).send("Paste não encontrado");
+
+  if (req.body.password !== paste.password) {
+    return res.status(403).send("Senha incorreta");
+  }
+
+  paste.views += 1;
+  writeData(data);
 
   if (paste.redirect) {
-    return res.json({ redirect: paste.redirect });
+    return res.redirect(paste.redirect);
   }
-  res.json({ content: paste.content });
+
+  res.send(`
+    <html>
+      <head><title>Paste ${paste.id}</title></head>
+      <body style="font-family: monospace; background: #111; color: #eee;">
+        <pre>${paste.text}</pre>
+      </body>
+    </html>
+  `);
 });
 
-// API: admin lista pastes
-app.get("/api/admin/pastes", (req, res) => {
-  if (!req.session.user || req.session.user.role !== "admin")
-    return res.status(403).json({ error: "Acesso negado" });
-  res.json({ pastes: Object.values(pastes) });
-});
-
-// rodar servidor
-app.listen(PORT, () => {
-  console.log("Servidor rodando na porta " + PORT);
-});
+// =======================
+// START
+// =======================
+app.listen(PORT, () =>
+  console.log(`Servidor rodando em http://localhost:${PORT}`)
+);
