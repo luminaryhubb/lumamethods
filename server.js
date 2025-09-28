@@ -1,95 +1,47 @@
-// server.js
 const express = require("express");
-const fetch = require("node-fetch");
-const cookieParser = require("cookie-parser");
-const fs = require("fs");
-const path = require("path");
 const session = require("express-session");
+const fetch = require("node-fetch");
+const path = require("path");
+const crypto = require("crypto");
 
 const app = express();
-const PORT = process.env.PORT || 3000;
 
-// =======================
-// CONFIGURAÇÕES
-// =======================
-const CLIENT_ID = process.env.CLIENT_ID;
-const CLIENT_SECRET = process.env.CLIENT_SECRET;
-const REDIRECT_URI = process.env.REDIRECT_URI || "http://localhost:3000/callback";
-const ADMIN_IDS = (process.env.ADMIN_IDS || "").split(",");
-
-const DATA_FILE = path.join(__dirname, "data.json");
-
-// =======================
-// HELPERS DE DATA
-// =======================
-function readData() {
-  try {
-    return JSON.parse(fs.readFileSync(DATA_FILE, "utf8"));
-  } catch {
-    return { users: {}, pastes: {} };
-  }
-}
-function writeData(data) {
-  fs.writeFileSync(DATA_FILE, JSON.stringify(data, null, 2));
-}
-
-// reset diário de usos
-setInterval(() => {
-  const data = readData();
-  const today = new Date().toISOString().slice(0, 10);
-  if (data.lastReset !== today) {
-    for (const uid in data.users) {
-      data.users[uid].usesLeft = 3;
-    }
-    data.lastReset = today;
-    writeData(data);
-    console.log("Usos resetados:", today);
-  }
-}, 60 * 1000);
-
-// =======================
-// MIDDLEWARES
-// =======================
+// Configurações básicas
 app.use(express.json());
-app.use(cookieParser());
+app.use(express.urlencoded({ extended: true }));
 app.use(
   session({
-    secret: process.env.SESSION_SECRET || "secret",
+    secret: "super-secret-key",
     resave: false,
     saveUninitialized: false,
   })
 );
 
-// static: public e admin
+// Pastas estáticas
 app.use("/public", express.static(path.join(__dirname, "public")));
 app.use("/admin", express.static(path.join(__dirname, "admin")));
 
-// =======================
-// AUTH
-// =======================
-function ensureAuth(req, res, next) {
-  if (req.session.user) return next();
-  return res.status(401).json({ error: "Não autorizado" });
-}
+// ---- Autenticação com Discord ----
+const CLIENT_ID = process.env.CLIENT_ID;
+const CLIENT_SECRET = process.env.CLIENT_SECRET;
+const REDIRECT_URI = process.env.REDIRECT_URI || "http://localhost:3000/auth/callback";
 
-app.get("/", (req, res) => {
-  res.sendFile(path.join(__dirname, "public", "index.html"));
-});
-
-// login com discord
-app.get("/login", (req, res) => {
+// Inicia login
+app.get("/auth/discord", (req, res) => {
   const url =
-    `https://discord.com/oauth2/authorize?client_id=${CLIENT_ID}` +
+    `https://discord.com/api/oauth2/authorize?client_id=${CLIENT_ID}` +
     `&redirect_uri=${encodeURIComponent(REDIRECT_URI)}` +
     `&response_type=code&scope=identify`;
   res.redirect(url);
 });
 
-app.get("/callback", async (req, res) => {
+// Callback do Discord
+app.get("/auth/callback", async (req, res) => {
   const code = req.query.code;
-  if (!code) return res.status(400).send("Code ausente");
+  if (!code) return res.send("Erro: nenhum código fornecido");
 
   try {
+    // Troca o code por um token
     const tokenRes = await fetch("https://discord.com/api/oauth2/token", {
       method: "POST",
       headers: { "Content-Type": "application/x-www-form-urlencoded" },
@@ -101,131 +53,75 @@ app.get("/callback", async (req, res) => {
         redirect_uri: REDIRECT_URI,
       }),
     });
-    const token = await tokenRes.json();
-    if (!token.access_token) return res.status(400).json(token);
 
+    const tokenData = await tokenRes.json();
+    if (tokenData.error) return res.send("Erro ao obter token: " + JSON.stringify(tokenData));
+
+    // Busca o usuário no Discord
     const userRes = await fetch("https://discord.com/api/users/@me", {
-      headers: { Authorization: `Bearer ${token.access_token}` },
+      headers: { Authorization: `Bearer ${tokenData.access_token}` },
     });
-    const user = await userRes.json();
+    const userData = await userRes.json();
 
-    const data = readData();
-    if (!data.users[user.id]) {
-      data.users[user.id] = {
-        id: user.id,
-        username: `${user.username}#${user.discriminator}`,
-        usesLeft: 3,
-      };
-      writeData(data);
-    }
+    // Salva na sessão
+    req.session.user = userData;
+    console.log("Usuário logado:", userData);
 
-    req.session.user = user;
-
-    if (ADMIN_IDS.includes(user.id)) {
-      return res.redirect("/admin/index.html");
-    } else {
-      return res.redirect("/public/methods.html");
-    }
+    res.redirect("/public/methods.html");
   } catch (err) {
-    console.error("Erro callback:", err);
-    res.status(500).send("Erro interno");
+    console.error(err);
+    res.send("Erro no login");
   }
 });
 
-// logout
+// Logout
 app.get("/logout", (req, res) => {
   req.session.destroy(() => {
-    res.redirect("/");
+    res.redirect("/public/index.html");
   });
 });
 
-// =======================
-// API USER
-// =======================
-app.get("/api/user", ensureAuth, (req, res) => {
-  const data = readData();
-  const uid = req.session.user.id;
-  res.json(data.users[uid]);
+// ---- API do Shortner / Paste ----
+const pastes = new Map(); // {id:{text,password,redirect}}
+
+// Criar Paste
+app.post("/api/create", (req, res) => {
+  const { text, password, redirect } = req.body;
+  if (!text || !password) return res.json({ error: "Preencha todos os campos" });
+
+  const id = crypto.randomBytes(4).toString("hex");
+  pastes.set(id, { text, password, redirect });
+  res.json({ id });
 });
 
-// =======================
-// API PASTES
-// =======================
-app.post("/api/create", ensureAuth, (req, res) => {
-  const text = (req.body.text || req.body.content || "").toString().trim();
-  const password = (req.body.password || "").toString();
-  const redirect = (req.body.redirect || req.body.url || null);
-
-  if (!text || !password) {
-    return res
-      .status(400)
-      .json({ error: "Faltando dados: text/content e password" });
-  }
-
-  const data = readData();
-  const uid = req.session.user.id;
-
-  if (!ADMIN_IDS.includes(uid)) {
-    if (data.users[uid].usesLeft <= 0) {
-      return res.status(403).json({ error: "Sem usos restantes" });
-    }
-    data.users[uid].usesLeft -= 1;
-  }
-
-  const id = Math.random().toString(36).slice(2, 9);
-  data.pastes[id] = {
-    id,
-    text,
-    password,
-    redirect,
-    createdBy: uid,
-    createdAt: new Date().toISOString(),
-    views: 0,
-  };
-  writeData(data);
-
-  res.json({ id, link: `/paste/${id}` });
-});
-
-// compatibilidade
-app.post("/api/paste", ensureAuth, (req, res) => {
-  req.url = "/api/create";
-  app.handle(req, res);
-});
-
-// abrir paste
+// Acessar Paste
 app.get("/paste/:id", (req, res) => {
-  const data = readData();
-  const paste = data.pastes[req.params.id];
-  if (!paste) return res.status(404).send("Paste não encontrado");
+  const paste = pastes.get(req.params.id);
+  if (!paste) return res.send("Paste não encontrado");
 
+  // Exibir página que pede senha
   res.send(`
     <html>
-      <head><title>Paste ${paste.id}</title></head>
-      <body style="font-family: sans-serif; background: #111; color: #eee;">
-        <h2>Paste protegido</h2>
-        <form method="POST" action="/paste/${paste.id}/view">
-          <input type="password" name="password" placeholder="Senha" required />
-          <button type="submit">Ver Conteúdo</button>
+      <head><title>Paste</title></head>
+      <body style="font-family:sans-serif; padding:2rem; background:#111; color:#eee;">
+        <h2>Digite a senha para ver o conteúdo</h2>
+        <form method="POST" action="/paste/${req.params.id}">
+          <input type="password" name="password" placeholder="Senha" required/>
+          <button type="submit">Acessar</button>
         </form>
       </body>
     </html>
   `);
 });
 
-// ver paste
-app.use(express.urlencoded({ extended: true }));
-app.post("/paste/:id/view", (req, res) => {
-  const data = readData();
-  const paste = data.pastes[req.params.id];
-  if (!paste) return res.status(404).send("Paste não encontrado");
+// Verificação da senha
+app.post("/paste/:id", express.urlencoded({ extended: true }), (req, res) => {
+  const paste = pastes.get(req.params.id);
+  if (!paste) return res.send("Paste não encontrado");
 
   if (req.body.password !== paste.password) {
-    return res.status(403).send("Senha incorreta");
+    return res.send("Senha incorreta");
   }
-
-  paste.views += 1;
-  writeData(data);
 
   if (paste.redirect) {
     return res.redirect(paste.redirect);
@@ -233,17 +129,20 @@ app.post("/paste/:id/view", (req, res) => {
 
   res.send(`
     <html>
-      <head><title>Paste ${paste.id}</title></head>
-      <body style="font-family: monospace; background: #111; color: #eee;">
-        <pre>${paste.text}</pre>
+      <head><title>Paste</title></head>
+      <body style="font-family:sans-serif; padding:2rem; background:#111; color:#eee; white-space:pre-wrap;">
+        <h2>Conteúdo:</h2>
+        <div style="background:#222; padding:1rem; border-radius:8px;">${paste.text}</div>
       </body>
     </html>
   `);
 });
 
-// =======================
-// START
-// =======================
-app.listen(PORT, () =>
-  console.log(`Servidor rodando em http://localhost:${PORT}`)
-);
+// ---- Admin ----
+app.get("/admin", (req, res) => {
+  res.sendFile(path.join(__dirname, "admin/index.html"));
+});
+
+// ---- Start Server ----
+const PORT = process.env.PORT || 3000;
+app.listen(PORT, () => console.log(`Servidor rodando na porta ${PORT}`));
