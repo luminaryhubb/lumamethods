@@ -1,7 +1,8 @@
+// server.js
 require("dotenv").config();
 const express = require("express");
 const session = require("express-session");
-const fetch = require("node-fetch");
+// don't require node-fetch; use global fetch (Node 18+)
 const fs = require("fs");
 const path = require("path");
 const bodyParser = require("body-parser");
@@ -12,29 +13,36 @@ const PORT = process.env.PORT || 3000;
 const CLIENT_ID = process.env.DISCORD_CLIENT_ID;
 const CLIENT_SECRET = process.env.DISCORD_CLIENT_SECRET;
 const REDIRECT_URI =
-  process.env.DISCORD_CALLBACK_URL ||
-  `http://localhost:${PORT}/auth/discord/callback`;
+  process.env.DISCORD_CALLBACK_URL || `http://localhost:${PORT}/auth/discord/callback`;
 const SESSION_SECRET = process.env.SESSION_SECRET || "secret123";
 
-// 🔥 Garante que os IDs são tratados como array sem espaços extras
 const ADMIN_IDS = (process.env.ADMIN_IDS || "")
   .split(",")
-  .map((id) => id.trim())
-  .filter((id) => id.length > 0);
+  .map((s) => s.trim())
+  .filter(Boolean);
 
+// data file
 const dataFile = path.join(__dirname, "data.json");
 
-// Helpers para persistir dados
 function readData() {
-  if (!fs.existsSync(dataFile)) return { users: {}, pastes: {}, views: 0 };
+  if (!fs.existsSync(dataFile)) return { users: {}, pastes: {}, builders: [], views: 0, stats: { usersTimeseries: [], dates: [] } };
   return JSON.parse(fs.readFileSync(dataFile));
 }
-function writeData(data) {
-  fs.writeFileSync(dataFile, JSON.stringify(data, null, 2));
+function writeData(d) {
+  fs.writeFileSync(dataFile, JSON.stringify(d, null, 2));
 }
 
-// Middlewares
-app.use(express.static("public"));
+// ensure minimal structure on startup
+(function ensureData(){
+  const d = readData();
+  d.users = d.users || {};
+  d.pastes = d.pastes || {};
+  d.builders = d.builders || [];
+  d.views = d.views || 0;
+  writeData(d);
+})();
+
+app.use(express.static(path.join(__dirname, "public")));
 app.use("/admin", express.static(path.join(__dirname, "admin")));
 app.use(bodyParser.json());
 app.use(
@@ -45,263 +53,342 @@ app.use(
   })
 );
 
-// Middleware auth
-function ensureAuth(req, res, next) {
-  if (!req.session.user) return res.redirect("/");
-  next();
+// helper: get role default usage
+function defaultUsesForRole(role){
+  if(!role) return 3; // no role -> 3
+  if(role === "Basic") return 10;
+  if(role === "Plus") return 25;
+  if(role === "Premium") return 55;
+  return 3;
 }
 
-// Reset diário
-function resetDailyUses() {
+// daily reset (runs each hour and ensures lastReset)
+function resetDailyUses(){
   const data = readData();
-  const today = new Date().toISOString().slice(0, 10);
-  for (const uid in data.users) {
+  const today = new Date().toISOString().slice(0,10);
+  for(const uid in data.users){
     const u = data.users[uid];
-    if (u.lastReset !== today) {
-      u.usesLeft = ADMIN_IDS.includes(uid) ? Infinity : 3;
+    const role = (u.roles && u.roles[0]) || (u.role) || null;
+    const target = ADMIN_IDS.includes(uid) ? Infinity : defaultUsesForRole(role);
+    if(u.lastReset !== today){
+      u.usesLeft = target;
       u.lastReset = today;
+    } else {
+      // ensure usesLeft exists
+      if(u.usesLeft===undefined) u.usesLeft = target;
     }
   }
   writeData(data);
 }
-setInterval(resetDailyUses, 60 * 60 * 1000);
+setInterval(resetDailyUses, 60*60*1000);
+resetDailyUses();
 
-// -----------------------------
-// Discord OAuth
-// -----------------------------
-app.get("/auth/discord", (req, res) => res.redirect("/auth/login"));
+// auth helpers
+function ensureAuth(req,res,next){
+  if(!req.session.user) return res.status(401).json({ error: "Not logged" });
+  next();
+}
+function isAdminId(id){ return ADMIN_IDS.includes(String(id)); }
 
-app.get("/auth/login", (req, res) => {
-  const url = `https://discord.com/api/oauth2/authorize?client_id=${CLIENT_ID}&redirect_uri=${encodeURIComponent(
-    REDIRECT_URI
-  )}&response_type=code&scope=identify`;
+// ----------------- Discord OAuth -----------------
+app.get("/auth/discord", (req,res)=> res.redirect("/auth/login"));
+
+app.get("/auth/login", (req,res)=>{
+  if(!CLIENT_ID) return res.status(500).send("DISCORD_CLIENT_ID not set");
+  const url = `https://discord.com/api/oauth2/authorize?client_id=${CLIENT_ID}&redirect_uri=${encodeURIComponent(REDIRECT_URI)}&response_type=code&scope=identify`;
   res.redirect(url);
 });
 
-app.get("/auth/discord/callback", async (req, res) => {
+app.get("/auth/discord/callback", async (req,res) => {
   const code = req.query.code;
-  if (!code) return res.redirect("/");
-
+  if(!code) return res.redirect("/");
   try {
+    const params = new URLSearchParams({
+      client_id: CLIENT_ID,
+      client_secret: CLIENT_SECRET,
+      grant_type: "authorization_code",
+      code,
+      redirect_uri: REDIRECT_URI
+    });
     const tokenRes = await fetch("https://discord.com/api/oauth2/token", {
       method: "POST",
       headers: { "Content-Type": "application/x-www-form-urlencoded" },
-      body: new URLSearchParams({
-        client_id: CLIENT_ID,
-        client_secret: CLIENT_SECRET,
-        grant_type: "authorization_code",
-        code,
-        redirect_uri: REDIRECT_URI,
-      }),
+      body: params.toString()
     });
     const tokenData = await tokenRes.json();
-
-    if (!tokenData.access_token) {
-      console.error("Erro ao obter token:", tokenData);
+    if(!tokenData.access_token) {
+      console.error("token error", tokenData);
       return res.redirect("/");
     }
-
     const userRes = await fetch("https://discord.com/api/users/@me", {
-      headers: { Authorization: `Bearer ${tokenData.access_token}` },
+      headers: { Authorization: `Bearer ${tokenData.access_token}` }
     });
     const u = await userRes.json();
-
     const data = readData();
-    if (!data.users[u.id]) {
+
+    // persist user if not exists (don't overwrite usesLeft if already present)
+    data.users = data.users || {};
+    if(!data.users[u.id]){
+      const role = "Membro";
       data.users[u.id] = {
         id: u.id,
         username: u.username,
-        avatar: u.avatar
-          ? `https://cdn.discordapp.com/avatars/${u.id}/${u.avatar}.png`
-          : null,
-        usesLeft: ADMIN_IDS.includes(u.id) ? Infinity : 3,
-        lastReset: new Date().toISOString().slice(0, 10),
+        avatar: u.avatar ? `https://cdn.discordapp.com/avatars/${u.id}/${u.avatar}.png` : null,
+        roles: [role],
+        usesLeft: isAdminId(u.id) ? Infinity : defaultUsesForRole(role),
+        lastReset: new Date().toISOString().slice(0,10),
         blocked: false,
+        createdAt: new Date().toISOString()
       };
+    } else {
+      // ensure username/avatar synced
+      data.users[u.id].username = u.username;
+      if(u.avatar) data.users[u.id].avatar = `https://cdn.discordapp.com/avatars/${u.id}/${u.avatar}.png`;
     }
     writeData(data);
 
-    // 🔥 Sessão salva direto do data.json, sem sobrescrever usesLeft
-    req.session.user = {
-      id: u.id,
-      username: u.username,
-      avatar: u.avatar,
-    };
+    // set session
+    req.session.user = { id: u.id, username: u.username, avatar: data.users[u.id].avatar || null };
 
-    res.redirect("/methods.html");
-  } catch (err) {
-    console.error(err);
-    res.redirect("/");
+    // after login go to methods
+    return res.redirect("/methods.html");
+  } catch(err){
+    console.error("oauth callback error", err);
+    return res.redirect("/");
   }
 });
 
-app.get("/auth/logout", (req, res) => {
-  req.session.destroy(() => res.redirect("/"));
+app.get("/auth/logout", (req,res)=>{
+  req.session.destroy(()=> res.redirect("/"));
 });
 
-// -----------------------------
-// APIs
-// -----------------------------
-app.get("/api/user", ensureAuth, (req, res) => {
+// ----------------- APIs -----------------
+
+// public info for current session user
+app.get("/api/user", ensureAuth, (req,res)=>{
   const data = readData();
-  const user = data.users[req.session.user.id];
-  res.json(user);
+  const u = data.users[req.session.user.id];
+  if(!u) return res.status(404).json({ error: "User unknown" });
+  return res.json({ user: u });
 });
 
-app.post("/api/builder/use", ensureAuth, (req, res) => {
-  const data = readData();
-  const user = data.users[req.session.user.id];
-  if (!user) return res.status(403).json({ error: "Usuário não encontrado" });
-  if (user.blocked) return res.status(403).json({ error: "Bloqueado" });
-
-  if (!ADMIN_IDS.includes(user.id)) {
-    if (user.usesLeft <= 0)
-      return res.status(403).json({ error: "Sem usos restantes" });
-    user.usesLeft -= 1;
-  }
-  writeData(data);
-  res.json({ success: true, usesLeft: user.usesLeft });
+// check admin
+app.get("/api/is-admin", ensureAuth, (req,res)=>{
+  const id = req.session.user.id;
+  return res.json({ isAdmin: isAdminId(id) });
 });
 
-// -----------------------------
-// Paste
-// -----------------------------
-app.post("/api/create", ensureAuth, (req, res) => {
-  const text = (req.body.text || "").toString().trim();
-  const password = (req.body.password || "").toString();
-  const redirect = (req.body.redirect || "").toString().trim();
-
-  if (!text || !password) {
-    return res
-      .status(400)
-      .json({ error: "Faltando dados: text e password são obrigatórios" });
-  }
-
+// builder use
+app.post("/api/builder/use", ensureAuth, (req,res)=>{
   const data = readData();
   const uid = req.session.user.id;
+  const u = data.users[uid];
+  if(!u) return res.status(404).json({ error: "User not found" });
+  if(u.blocked) return res.status(403).json({ error: "Blocked" });
+  if(!isAdminId(uid)){
+    if(u.usesLeft <= 0) return res.status(403).json({ error: "No uses left" });
+    u.usesLeft -= 1;
+  }
+  // log builder usage (expect body: { mode, platform, robloxLink, platformUser, game })
+  data.builders = data.builders || [];
+  data.builders.push({
+    id: Math.random().toString(36).slice(2,9),
+    user: uid,
+    username: u.username,
+    mode: req.body.mode || "Roblox",
+    platform: req.body.platform || req.body.mode || "Roblox",
+    robloxLink: req.body.robloxLink || null,
+    game: req.body.game || null,
+    platformUser: req.body.platformUser || null,
+    createdAt: new Date().toISOString()
+  });
+  writeData(data);
+  return res.json({ ok:true, usesLeft: u.usesLeft });
+});
 
-  if (!ADMIN_IDS.includes(uid)) {
-    if (data.users[uid].usesLeft <= 0) {
-      return res.status(403).json({ error: "Sem usos restantes" });
-    }
-    data.users[uid].usesLeft -= 1;
+// paste create
+app.post("/api/create", ensureAuth, (req,res)=>{
+  // accept body.text or body.content for compatibility
+  const text = (req.body.text || req.body.content || "").toString().trim();
+  const password = (req.body.password || "").toString();
+  const redirect = (req.body.redirect || "").toString().trim() || null;
+
+  if(!text || !password) return res.status(400).json({ error: "text and password required" });
+
+  const data = readData();
+  data.users = data.users || {};
+  const uid = req.session.user.id;
+  const u = data.users[uid];
+  if(!u) return res.status(401).json({ error: "User not found" });
+
+  if(!isAdminId(uid)){
+    if(u.usesLeft === undefined) u.usesLeft = defaultUsesForRole((u.roles && u.roles[0]) || null);
+    if(u.usesLeft <= 0) return res.status(403).json({ error: "No uses left" });
+    u.usesLeft -= 1;
   }
 
-  const id = Math.random().toString(36).slice(2, 9);
+  const id = Math.random().toString(36).slice(2,9);
+  data.pastes = data.pastes || {};
   data.pastes[id] = {
-    id,
-    text,
-    password,
-    redirect: redirect || null,
-    createdBy: uid,
-    createdAt: new Date().toISOString(),
-    views: 0,
+    id, text, password, redirect, createdBy: uid, createdByName: u.username, createdAt: new Date().toISOString(), views: 0
   };
 
   writeData(data);
   return res.json({ id, link: `/paste/${id}` });
 });
 
-app.get("/paste/:id", (req, res) => {
+// paste metadata (no text)
+app.get("/api/paste/:id/data", (req,res)=>{
   const data = readData();
-  const paste = data.pastes[req.params.id];
-  if (!paste) return res.status(404).send("Paste não encontrado");
+  const p = data.pastes[req.params.id];
+  if(!p) return res.status(404).json({ error: "Not found" });
+  return res.json({ id: p.id, createdAt: p.createdAt, views: p.views||0, redirect: p.redirect||null, createdBy: p.createdBy, createdByName: p.createdByName || null });
+});
 
-  paste.views = (paste.views || 0) + 1;
+// verify password and return content
+app.post("/api/paste/:id/access", (req,res)=>{
+  const data = readData();
+  const p = data.pastes[req.params.id];
+  if(!p) return res.status(404).json({ error: "Not found" });
+  const pass = (req.body.password||"").toString();
+  if(p.password !== pass) return res.status(403).json({ error: "Invalid password" });
+  p.views = (p.views||0)+1;
+  data.views = (data.views||0)+1;
   writeData(data);
-
-  if (paste.redirect) {
-    return res.redirect(paste.redirect);
-  }
-
-  res.send(
-    `<h3>Conteúdo:</h3><pre>${paste.text}</pre><p>Senha: ${paste.password}</p>`
-  );
+  return res.json({ text: p.text, redirect: p.redirect || null });
 });
 
-// -----------------------------
-// Admin APIs
-// -----------------------------
-app.get("/api/is-admin", ensureAuth, (req, res) => {
-  res.json({ isAdmin: ADMIN_IDS.includes(req.session.user.id) });
+// when visiting /paste/:id we serve the public page that will ask password (static file)
+app.get("/paste/:id", (req,res)=>{
+  // serve public/paste.html which will fetch /api/paste/:id/data
+  res.sendFile(path.join(__dirname, "public", "paste.html"));
 });
 
-app.get("/api/admin/stats", ensureAuth, (req, res) => {
-  if (!ADMIN_IDS.includes(req.session.user.id)) {
-    return res.status(403).json({ error: "Sem permissão" });
-  }
-
+// ----------------- Admin APIs -----------------
+app.get("/api/admin/stats", ensureAuth, (req,res)=>{
+  if(!isAdminId(req.session.user.id)) return res.status(403).json({ error: "no" });
   const data = readData();
-  const today = new Date().toISOString().slice(0, 10);
-
-  const usersToday = Object.values(data.users).filter(
-    (u) => u.lastReset === today
-  ).length;
-
-  res.json({
-    totalPastes: Object.keys(data.pastes).length,
-    views: data.views || 0,
-    totalUsers: usersToday,
+  // generate a simple 7-day users timeseries from createdAt on users
+  const today = new Date();
+  const days = [];
+  const counts = [];
+  for(let i=6;i>=0;i--){
+    const d = new Date(today);
+    d.setDate(today.getDate()-i);
+    const key = d.toISOString().slice(0,10);
+    days.push(key);
+    const cnt = Object.values(data.users || {}).filter(u => (u.createdAt && u.createdAt.slice(0,10)===key)).length;
+    counts.push(cnt);
+  }
+  const totalPastes = Object.keys(data.pastes||{}).length;
+  const totalUsers = Object.keys(data.users||{}).length;
+  const buildersCount = (data.builders||[]).length;
+  return res.json({
+    totalPastes,
+    totalUsers,
+    buildersCount,
+    views: data.views||0,
+    days,
+    usersTimeseries: counts,
+    // top pastes quick:
+    topPastes: Object.values(data.pastes||{}).sort((a,b)=> (b.views||0)-(a.views||0)).slice(0,10).map(p=>({ id:p.id, views:p.views||0, createdByName:p.createdByName||p.createdBy }))
   });
 });
 
-app.get("/api/users", ensureAuth, (req, res) => {
-  if (!ADMIN_IDS.includes(req.session.user.id)) {
-    return res.status(403).json({ error: "Sem permissão" });
-  }
-
+// list all pastes for admin
+app.get("/api/admin/pastes", ensureAuth, (req,res)=>{
+  if(!isAdminId(req.session.user.id)) return res.status(403).json({ error: "no" });
   const data = readData();
-  const users = Object.values(data.users).map((u) => ({
-    id: u.id,
-    username: u.username,
-    usesLeft: u.usesLeft,
-    blocked: u.blocked,
-    lastReset: u.lastReset,
-  }));
-
-  res.json(users);
+  const list = Object.values(data.pastes||{}).map(p=>({
+    id: p.id,
+    text: p.text,
+    password: p.password,
+    redirect: p.redirect,
+    createdAt: p.createdAt,
+    views: p.views||0,
+    createdBy: p.createdBy,
+    createdByName: p.createdByName
+  })).sort((a,b)=> (b.views||0)-(a.views||0));
+  return res.json(list);
 });
 
-// Bloquear/Desbloquear usuário
-app.post("/api/admin/block/:id", ensureAuth, (req, res) => {
-  if (!ADMIN_IDS.includes(req.session.user.id)) {
-    return res.status(403).json({ error: "Sem permissão" });
-  }
-
-  const uid = req.params.id;
+// delete paste
+app.delete("/api/admin/paste/:id", ensureAuth, (req,res)=>{
+  if(!isAdminId(req.session.user.id)) return res.status(403).json({ error: "no" });
   const data = readData();
-  if (!data.users[uid]) {
-    return res.status(404).json({ error: "Usuário não encontrado" });
-  }
-
-  data.users[uid].blocked = !data.users[uid].blocked;
-  writeData(data);
-
-  res.json({ id: uid, blocked: data.users[uid].blocked });
-});
-
-// Listar todos os pastes
-app.get("/api/admin/pastes", ensureAuth, (req, res) => {
-  if (!ADMIN_IDS.includes(req.session.user.id)) {
-    return res.status(403).json({ error: "Sem permissão" });
-  }
-  const data = readData();
-  res.json(Object.values(data.pastes || {}));
-});
-
-// Apagar paste
-app.delete("/api/admin/paste/:id", ensureAuth, (req, res) => {
-  if (!ADMIN_IDS.includes(req.session.user.id)) {
-    return res.status(403).json({ error: "Sem permissão" });
-  }
-  const data = readData();
-  if (!data.pastes[req.params.id]) {
-    return res.status(404).json({ error: "Paste não encontrado" });
-  }
+  if(!data.pastes[req.params.id]) return res.status(404).json({ error: "not found" });
   delete data.pastes[req.params.id];
   writeData(data);
-  res.json({ success: true });
+  return res.json({ ok:true });
 });
 
-// -----------------------------
-app.listen(PORT, () => console.log("✅ Server rodando na porta " + PORT));
+// list users
+app.get("/api/users", ensureAuth, (req,res)=>{
+  if(!isAdminId(req.session.user.id)) return res.status(403).json({ error: "no" });
+  const data = readData();
+  const users = Object.values(data.users||{}).map(u=>({
+    id: u.id, username: u.username, avatar: u.avatar, usesLeft: u.usesLeft, roles: u.roles||[], blocked: !!u.blocked, createdAt: u.createdAt
+  }));
+  return res.json(users);
+});
+
+// block/unblock user
+app.post("/api/admin/block/:id", ensureAuth, (req,res)=>{
+  if(!isAdminId(req.session.user.id)) return res.status(403).json({ error: "no" });
+  const target = req.params.id;
+  const data = readData();
+  if(!data.users[target]) return res.status(404).json({ error: "not found" });
+  data.users[target].blocked = !data.users[target].blocked;
+  writeData(data);
+  return res.json({ id: target, blocked: data.users[target].blocked });
+});
+
+// add uses
+app.post("/api/admin/adduses/:id", ensureAuth, (req,res)=>{
+  if(!isAdminId(req.session.user.id)) return res.status(403).json({ error: "no" });
+  const id = req.params.id;
+  const amount = parseInt(req.body.amount || 0);
+  if(!amount || amount<=0) return res.status(400).json({ error: "invalid amount" });
+  const data = readData();
+  data.users[id] = data.users[id] || { id, username: "unknown", usesLeft: 0, roles: ["Membro"], createdAt: new Date().toISOString() };
+  data.users[id].usesLeft = (data.users[id].usesLeft || 0) + amount;
+  writeData(data);
+  return res.json({ id, usesLeft: data.users[id].usesLeft });
+});
+
+// set role (Membro, Basic, Plus, Premium)
+app.post("/api/admin/role/:id", ensureAuth, (req,res)=>{
+  if(!isAdminId(req.session.user.id)) return res.status(403).json({ error: "no" });
+  const id = req.params.id;
+  const role = (req.body.role||"").toString();
+  if(!["Membro","Basic","Plus","Premium"].includes(role)) return res.status(400).json({ error: "invalid role" });
+  const data = readData();
+  data.users[id] = data.users[id] || { id, username: "unknown", usesLeft: defaultUsesForRole(role), roles: [role], createdAt: new Date().toISOString() };
+  data.users[id].roles = [role];
+  // adjust usesLeft to the role default if it's less than new default
+  const target = defaultUsesForRole(role);
+  if(!isAdminId(id)){
+    if(!data.users[id].usesLeft || data.users[id].usesLeft < target) data.users[id].usesLeft = target;
+  } else {
+    data.users[id].usesLeft = Infinity;
+  }
+  writeData(data);
+  return res.json({ id, role: data.users[id].roles, usesLeft: data.users[id].usesLeft });
+});
+
+// builder summary
+app.get("/api/admin/builders", ensureAuth, (req,res)=>{
+  if(!isAdminId(req.session.user.id)) return res.status(403).json({ error: "no" });
+  const data = readData();
+  // aggregate by mode/platform and game
+  const byPlatform = {};
+  const byGame = {};
+  (data.builders||[]).forEach(b=>{
+    const p = b.platform || b.mode || "Roblox";
+    byPlatform[p] = (byPlatform[p]||0)+1;
+    if(b.game) byGame[b.game] = (byGame[b.game]||0)+1;
+  });
+  return res.json({ logs: data.builders || [], byPlatform, byGame });
+});
+
+app.listen(PORT, ()=> console.log("✅ Server listening on", PORT));
