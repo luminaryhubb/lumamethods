@@ -15,12 +15,7 @@ const REDIRECT_URI =
   process.env.DISCORD_CALLBACK_URL ||
   `http://localhost:${PORT}/auth/discord/callback`;
 const SESSION_SECRET = process.env.SESSION_SECRET || "secret123";
-
-// IDs dos admins (configurados no .env ou fixos)
-const ADMIN_IDS = (
-  process.env.ADMIN_IDS ||
-  "1411328138931077142,1420447434362060917,1066509829025300560"
-).split(",");
+const ADMIN_IDS = (process.env.ADMIN_IDS || "").split(",");
 
 const dataFile = path.join(__dirname, "data.json");
 
@@ -69,11 +64,8 @@ setInterval(resetDailyUses, 60 * 60 * 1000);
 // -----------------------------
 // Discord OAuth
 // -----------------------------
-
-// Alias para compatibilidade
 app.get("/auth/discord", (req, res) => res.redirect("/auth/login"));
 
-// Login
 app.get("/auth/login", (req, res) => {
   const url = `https://discord.com/api/oauth2/authorize?client_id=${CLIENT_ID}&redirect_uri=${encodeURIComponent(
     REDIRECT_URI
@@ -81,7 +73,6 @@ app.get("/auth/login", (req, res) => {
   res.redirect(url);
 });
 
-// Callback
 app.get("/auth/discord/callback", async (req, res) => {
   const code = req.query.code;
   if (!code) return res.redirect("/");
@@ -115,7 +106,9 @@ app.get("/auth/discord/callback", async (req, res) => {
       data.users[u.id] = {
         id: u.id,
         username: u.username,
-        avatar: `https://cdn.discordapp.com/avatars/${u.id}/${u.avatar}.png`,
+        avatar: u.avatar
+          ? `https://cdn.discordapp.com/avatars/${u.id}/${u.avatar}.png`
+          : null,
         usesLeft: ADMIN_IDS.includes(u.id) ? Infinity : 3,
         lastReset: new Date().toISOString().slice(0, 10),
         blocked: false,
@@ -125,7 +118,6 @@ app.get("/auth/discord/callback", async (req, res) => {
 
     req.session.user = { id: u.id, username: u.username, avatar: u.avatar };
 
-    // após login → manda para methods
     res.redirect("/methods.html");
   } catch (err) {
     console.error(err);
@@ -133,7 +125,6 @@ app.get("/auth/discord/callback", async (req, res) => {
   }
 });
 
-// Logout
 app.get("/auth/logout", (req, res) => {
   req.session.destroy(() => res.redirect("/"));
 });
@@ -141,15 +132,12 @@ app.get("/auth/logout", (req, res) => {
 // -----------------------------
 // APIs
 // -----------------------------
-
-// Info user
 app.get("/api/user", ensureAuth, (req, res) => {
   const data = readData();
   const user = data.users[req.session.user.id];
   res.json(user);
 });
 
-// Builder (usa 1 uso)
 app.post("/api/builder/use", ensureAuth, (req, res) => {
   const data = readData();
   const user = data.users[req.session.user.id];
@@ -162,7 +150,7 @@ app.post("/api/builder/use", ensureAuth, (req, res) => {
     user.usesLeft -= 1;
   }
   writeData(data);
-  res.json({ success: true });
+  res.json({ success: true, usesLeft: user.usesLeft });
 });
 
 // -----------------------------
@@ -204,7 +192,6 @@ app.post("/api/create", ensureAuth, (req, res) => {
   return res.json({ id, link: `/paste/${id}` });
 });
 
-// Ver paste
 app.get("/paste/:id", (req, res) => {
   const data = readData();
   const paste = data.pastes[req.params.id];
@@ -225,23 +212,62 @@ app.get("/paste/:id", (req, res) => {
 // -----------------------------
 // Admin APIs
 // -----------------------------
-
-// Check se é admin
 app.get("/api/is-admin", ensureAuth, (req, res) => {
-  const isAdmin = ADMIN_IDS.includes(req.session.user.id);
-  res.json({ isAdmin });
+  res.json({ admin: ADMIN_IDS.includes(req.session.user.id) });
 });
 
-// Stats
 app.get("/api/admin/stats", ensureAuth, (req, res) => {
-  if (!ADMIN_IDS.includes(req.session.user.id))
+  if (!ADMIN_IDS.includes(req.session.user.id)) {
     return res.status(403).json({ error: "Sem permissão" });
+  }
+
   const data = readData();
+  const today = new Date().toISOString().slice(0, 10);
+
+  const usersToday = Object.values(data.users).filter(
+    (u) => u.lastReset === today
+  ).length;
+
   res.json({
-    totalUsers: Object.keys(data.users).length,
-    totalPastes: Object.keys(data.pastes).length,
+    pastes: Object.keys(data.pastes).length,
     views: data.views || 0,
+    usersToday,
   });
+});
+
+app.get("/api/users", ensureAuth, (req, res) => {
+  if (!ADMIN_IDS.includes(req.session.user.id)) {
+    return res.status(403).json({ error: "Sem permissão" });
+  }
+
+  const data = readData();
+  const users = Object.values(data.users).map((u) => ({
+    id: u.id,
+    name: u.username,
+    usesLeft: u.usesLeft,
+    blocked: u.blocked,
+    lastReset: u.lastReset,
+  }));
+
+  res.json(users);
+});
+
+// Bloquear/Desbloquear usuário
+app.post("/api/admin/block/:id", ensureAuth, (req, res) => {
+  if (!ADMIN_IDS.includes(req.session.user.id)) {
+    return res.status(403).json({ error: "Sem permissão" });
+  }
+
+  const uid = req.params.id;
+  const data = readData();
+  if (!data.users[uid]) {
+    return res.status(404).json({ error: "Usuário não encontrado" });
+  }
+
+  data.users[uid].blocked = !data.users[uid].blocked;
+  writeData(data);
+
+  res.json({ id: uid, blocked: data.users[uid].blocked });
 });
 
 // -----------------------------
