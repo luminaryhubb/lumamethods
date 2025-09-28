@@ -213,7 +213,7 @@ app.get("/paste/:id", (req, res) => {
 // Admin APIs
 // -----------------------------
 app.get("/api/is-admin", ensureAuth, (req, res) => {
-  res.json({ admin: ADMIN_IDS.includes(req.session.user.id) });
+  res.json({ isAdmin: ADMIN_IDS.includes(req.session.user.id) });
 });
 
 app.get("/api/admin/stats", ensureAuth, (req, res) => {
@@ -229,9 +229,9 @@ app.get("/api/admin/stats", ensureAuth, (req, res) => {
   ).length;
 
   res.json({
-    pastes: Object.keys(data.pastes).length,
+    totalPastes: Object.keys(data.pastes).length,
     views: data.views || 0,
-    usersToday,
+    totalUsers: usersToday,
   });
 });
 
@@ -243,7 +243,7 @@ app.get("/api/users", ensureAuth, (req, res) => {
   const data = readData();
   const users = Object.values(data.users).map((u) => ({
     id: u.id,
-    name: u.username,
+    username: u.username,
     usesLeft: u.usesLeft,
     blocked: u.blocked,
     lastReset: u.lastReset,
@@ -268,6 +268,29 @@ app.post("/api/admin/block/:id", ensureAuth, (req, res) => {
   writeData(data);
 
   res.json({ id: uid, blocked: data.users[uid].blocked });
+});
+
+// 🔥 NOVO: listar todos os pastes
+app.get("/api/admin/pastes", ensureAuth, (req, res) => {
+  if (!ADMIN_IDS.includes(req.session.user.id)) {
+    return res.status(403).json({ error: "Sem permissão" });
+  }
+  const data = readData();
+  res.json(Object.values(data.pastes || {}));
+});
+
+// 🔥 NOVO: apagar paste
+app.delete("/api/admin/paste/:id", ensureAuth, (req, res) => {
+  if (!ADMIN_IDS.includes(req.session.user.id)) {
+    return res.status(403).json({ error: "Sem permissão" });
+  }
+  const data = readData();
+  if (!data.pastes[req.params.id]) {
+    return res.status(404).json({ error: "Paste não encontrado" });
+  }
+  delete data.pastes[req.params.id];
+  writeData(data);
+  res.json({ success: true });
 });
 
 // -----------------------------
