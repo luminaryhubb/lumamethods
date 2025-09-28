@@ -1,0 +1,84 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Luma Paste — Visualizar</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <style>
+    body { background:#07070a; color:#fff; font-family: ui-monospace, "JetBrains Mono", monospace; }
+    .glass { background: rgba(17,24,39,0.7); backdrop-filter: blur(8px); border: 1px solid rgba(255,255,255,0.05); }
+  </style>
+</head>
+<body class="min-h-screen flex items-center justify-center p-6">
+  <div class="w-full max-w-lg space-y-6">
+    <h1 class="text-3xl font-bold text-purple-300">Acessar Paste</h1>
+
+    <div id="info-box" class="text-sm text-neutral-400">Carregando informações...</div>
+
+    <div class="glass p-6 rounded-2xl shadow-lg">
+      <label class="block text-sm text-neutral-300 mb-2">Senha</label>
+      <input id="password" type="password" class="w-full p-3 rounded bg-neutral-900 border border-neutral-800 text-sm" placeholder="Digite a senha" />
+
+      <button id="access-btn" class="mt-4 px-4 py-3 rounded bg-purple-600 hover:bg-purple-500 w-full">Acessar</button>
+
+      <div id="error-box" class="mt-3 text-sm text-red-400 hidden"></div>
+      <div id="result" class="mt-4 hidden space-y-3">
+        <div id="paste-content" class="whitespace-pre-wrap bg-neutral-900 p-3 rounded text-sm"></div>
+        <a id="redirect-link" target="_blank" class="block text-sm text-purple-400 underline hidden"></a>
+      </div>
+    </div>
+  </div>
+
+<script>
+(async function(){
+  const id = window.location.pathname.split("/").pop();
+  const infoBox = document.getElementById("info-box");
+  const errorBox = document.getElementById("error-box");
+  const result = document.getElementById("result");
+  const pasteContent = document.getElementById("paste-content");
+  const redirectLink = document.getElementById("redirect-link");
+
+  try {
+    const r = await fetch(`/api/paste/${id}/data`);
+    if(!r.ok){ infoBox.textContent = "Paste não encontrado"; return; }
+    const meta = await r.json();
+    infoBox.textContent = `Criado por ${meta.createdByName||meta.createdBy} • Views: ${meta.views}`;
+  } catch(e){
+    infoBox.textContent = "Erro ao carregar informações";
+  }
+
+  document.getElementById("access-btn").addEventListener("click", async ()=>{
+    errorBox.classList.add("hidden");
+    result.classList.add("hidden");
+
+    const password = document.getElementById("password").value.trim();
+    if(!password){ errorBox.textContent = "Senha obrigatória"; errorBox.classList.remove("hidden"); return; }
+
+    try {
+      const r = await fetch(`/api/paste/${id}/access`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ password })
+      });
+      const data = await r.json();
+      if(!r.ok){ errorBox.textContent = data.error || "Erro"; errorBox.classList.remove("hidden"); return; }
+
+      if(data.redirect){
+        redirectLink.href = data.redirect;
+        redirectLink.textContent = "🔗 Redirecionar";
+        redirectLink.classList.remove("hidden");
+      } else {
+        pasteContent.textContent = data.text;
+        redirectLink.classList.add("hidden");
+      }
+      result.classList.remove("hidden");
+    } catch(e){
+      errorBox.textContent = "Erro de conexão";
+      errorBox.classList.remove("hidden");
+    }
+  });
+})();
+</script>
+</body>
+</html>
