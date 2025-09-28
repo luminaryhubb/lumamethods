@@ -15,7 +15,12 @@ const REDIRECT_URI =
   process.env.DISCORD_CALLBACK_URL ||
   `http://localhost:${PORT}/auth/discord/callback`;
 const SESSION_SECRET = process.env.SESSION_SECRET || "secret123";
-const ADMIN_IDS = (process.env.ADMIN_IDS || "").split(",");
+
+// 🔥 Garante que os IDs são tratados como array sem espaços extras
+const ADMIN_IDS = (process.env.ADMIN_IDS || "")
+  .split(",")
+  .map((id) => id.trim())
+  .filter((id) => id.length > 0);
 
 const dataFile = path.join(__dirname, "data.json");
 
@@ -113,10 +118,15 @@ app.get("/auth/discord/callback", async (req, res) => {
         lastReset: new Date().toISOString().slice(0, 10),
         blocked: false,
       };
-      writeData(data);
     }
+    writeData(data);
 
-    req.session.user = { id: u.id, username: u.username, avatar: u.avatar };
+    // 🔥 Sessão salva direto do data.json, sem sobrescrever usesLeft
+    req.session.user = {
+      id: u.id,
+      username: u.username,
+      avatar: u.avatar,
+    };
 
     res.redirect("/methods.html");
   } catch (err) {
@@ -154,7 +164,7 @@ app.post("/api/builder/use", ensureAuth, (req, res) => {
 });
 
 // -----------------------------
-// Paste (shortner)
+// Paste
 // -----------------------------
 app.post("/api/create", ensureAuth, (req, res) => {
   const text = (req.body.text || "").toString().trim();
@@ -270,7 +280,7 @@ app.post("/api/admin/block/:id", ensureAuth, (req, res) => {
   res.json({ id: uid, blocked: data.users[uid].blocked });
 });
 
-// 🔥 NOVO: listar todos os pastes
+// Listar todos os pastes
 app.get("/api/admin/pastes", ensureAuth, (req, res) => {
   if (!ADMIN_IDS.includes(req.session.user.id)) {
     return res.status(403).json({ error: "Sem permissão" });
@@ -279,7 +289,7 @@ app.get("/api/admin/pastes", ensureAuth, (req, res) => {
   res.json(Object.values(data.pastes || {}));
 });
 
-// 🔥 NOVO: apagar paste
+// Apagar paste
 app.delete("/api/admin/paste/:id", ensureAuth, (req, res) => {
   if (!ADMIN_IDS.includes(req.session.user.id)) {
     return res.status(403).json({ error: "Sem permissão" });
