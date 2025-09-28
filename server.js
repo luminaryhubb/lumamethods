@@ -2,7 +2,6 @@
 require("dotenv").config();
 const express = require("express");
 const session = require("express-session");
-// Node 18+ já tem fetch global
 const fs = require("fs");
 const path = require("path");
 const bodyParser = require("body-parser");
@@ -12,9 +11,7 @@ const PORT = process.env.PORT || 3000;
 
 const CLIENT_ID = process.env.DISCORD_CLIENT_ID;
 const CLIENT_SECRET = process.env.DISCORD_CLIENT_SECRET;
-const REDIRECT_URI =
-  process.env.DISCORD_CALLBACK_URL ||
-  `http://localhost:${PORT}/auth/discord/callback`;
+const REDIRECT_URI = process.env.DISCORD_CALLBACK_URL || `http://localhost:${PORT}/auth/discord/callback`;
 const SESSION_SECRET = process.env.SESSION_SECRET || "secret123";
 
 const ADMIN_IDS = (process.env.ADMIN_IDS || "")
@@ -22,7 +19,6 @@ const ADMIN_IDS = (process.env.ADMIN_IDS || "")
   .map((s) => s.trim())
   .filter(Boolean);
 
-// arquivo de persistência
 const dataFile = path.join(__dirname, "data.json");
 
 function readData() {
@@ -40,7 +36,7 @@ function writeData(d) {
   fs.writeFileSync(dataFile, JSON.stringify(d, null, 2));
 }
 
-// garantir estrutura mínima
+// ensure data structure
 (function ensureData() {
   const d = readData();
   d.users = d.users || {};
@@ -61,7 +57,7 @@ app.use(
   })
 );
 
-// helper: usos por cargo
+// helper: uses per role
 function defaultUsesForRole(role) {
   if (!role) return 3;
   if (role === "Basic") return 10;
@@ -70,16 +66,14 @@ function defaultUsesForRole(role) {
   return 3;
 }
 
-// reset diário
+// daily reset
 function resetDailyUses() {
   const data = readData();
   const today = new Date().toISOString().slice(0, 10);
   for (const uid in data.users) {
     const u = data.users[uid];
     const role = (u.roles && u.roles[0]) || u.role || null;
-    const target = ADMIN_IDS.includes(uid)
-      ? Infinity
-      : defaultUsesForRole(role);
+    const target = ADMIN_IDS.includes(uid) ? Infinity : defaultUsesForRole(role);
     if (u.lastReset !== today) {
       u.usesLeft = target;
       u.lastReset = today;
@@ -145,9 +139,7 @@ app.get("/auth/discord/callback", async (req, res) => {
       data.users[u.id] = {
         id: u.id,
         username: u.username,
-        avatar: u.avatar
-          ? `https://cdn.discordapp.com/avatars/${u.id}/${u.avatar}.png`
-          : null,
+        avatar: u.avatar ? `https://cdn.discordapp.com/avatars/${u.id}/${u.avatar}.png` : null,
         roles: [role],
         usesLeft: isAdminId(u.id) ? Infinity : defaultUsesForRole(role),
         lastReset: new Date().toISOString().slice(0, 10),
@@ -155,12 +147,13 @@ app.get("/auth/discord/callback", async (req, res) => {
         createdAt: new Date().toISOString(),
       };
     } else {
+      // update username/avatar
       data.users[u.id].username = u.username;
-      if (u.avatar)
-        data.users[u.id].avatar = `https://cdn.discordapp.com/avatars/${u.id}/${u.avatar}.png`;
+      if (u.avatar) data.users[u.id].avatar = `https://cdn.discordapp.com/avatars/${u.id}/${u.avatar}.png`;
     }
     writeData(data);
 
+    // keep session.user minimal but will return full user via /api/user
     req.session.user = {
       id: u.id,
       username: u.username,
@@ -185,7 +178,8 @@ app.get("/api/user", ensureAuth, (req, res) => {
   const data = readData();
   const u = data.users[req.session.user.id];
   if (!u) return res.status(404).json({ error: "User unknown" });
-  return res.json({ user: u });
+  // RETURN THE USER OBJECT DIRECTLY (was previously nested) so frontend can use user.username and user.id
+  return res.json(u);
 });
 
 // admin check
@@ -206,11 +200,12 @@ app.post("/api/builder/use", ensureAuth, (req, res) => {
     u.usesLeft -= 1;
   }
   data.builders = data.builders || [];
+  // Accept details from body (frontend must POST these fields)
   data.builders.push({
     id: Math.random().toString(36).slice(2, 9),
     user: uid,
     username: u.username,
-    mode: req.body.mode || "Roblox",
+    mode: req.body.mode || req.body.platform || "Roblox",
     platform: req.body.platform || req.body.mode || "Roblox",
     robloxLink: req.body.robloxLink || null,
     game: req.body.game || null,
@@ -227,8 +222,7 @@ app.post("/api/create", ensureAuth, (req, res) => {
   const password = (req.body.password || "").toString();
   const redirect = (req.body.redirect || "").toString().trim() || null;
 
-  if (!text || !password)
-    return res.status(400).json({ error: "text and password required" });
+  if (!text || !password) return res.status(400).json({ error: "text and password required" });
 
   const data = readData();
   const uid = req.session.user.id;
@@ -236,8 +230,7 @@ app.post("/api/create", ensureAuth, (req, res) => {
   if (!u) return res.status(401).json({ error: "User not found" });
 
   if (!isAdminId(uid)) {
-    if (u.usesLeft === undefined)
-      u.usesLeft = defaultUsesForRole((u.roles && u.roles[0]) || null);
+    if (u.usesLeft === undefined) u.usesLeft = defaultUsesForRole((u.roles && u.roles[0]) || null);
     if (u.usesLeft <= 0) return res.status(403).json({ error: "No uses left" });
     u.usesLeft -= 1;
   }
@@ -274,14 +267,13 @@ app.get("/api/paste/:id/data", (req, res) => {
   });
 });
 
-// verify password
+// verify password (view)
 app.post("/api/paste/:id/access", (req, res) => {
   const data = readData();
   const p = data.pastes[req.params.id];
   if (!p) return res.status(404).json({ error: "Not found" });
   const pass = (req.body.password || "").toString();
-  if (p.password !== pass)
-    return res.status(403).json({ error: "Invalid password" });
+  if (p.password !== pass) return res.status(403).json({ error: "Invalid password" });
   p.views = (p.views || 0) + 1;
   data.views = (data.views || 0) + 1;
   writeData(data);
@@ -295,8 +287,7 @@ app.get("/paste/:id", (req, res) => {
 
 // ----------------- Admin APIs -----------------
 app.get("/api/admin/stats", ensureAuth, (req, res) => {
-  if (!isAdminId(req.session.user.id))
-    return res.status(403).json({ error: "no" });
+  if (!isAdminId(req.session.user.id)) return res.status(403).json({ error: "no" });
   const data = readData();
   const today = new Date();
   const days = [];
@@ -306,9 +297,7 @@ app.get("/api/admin/stats", ensureAuth, (req, res) => {
     d.setDate(today.getDate() - i);
     const key = d.toISOString().slice(0, 10);
     days.push(key);
-    const cnt = Object.values(data.users || {}).filter(
-      (u) => u.createdAt && u.createdAt.slice(0, 10) === key
-    ).length;
+    const cnt = Object.values(data.users || {}).filter((u) => u.createdAt && u.createdAt.slice(0, 10) === key).length;
     counts.push(cnt);
   }
   const totalPastes = Object.keys(data.pastes || {}).length;
@@ -332,10 +321,9 @@ app.get("/api/admin/stats", ensureAuth, (req, res) => {
   });
 });
 
-// list all pastes
+// list all pastes (admin)
 app.get("/api/admin/pastes", ensureAuth, (req, res) => {
-  if (!isAdminId(req.session.user.id))
-    return res.status(403).json({ error: "no" });
+  if (!isAdminId(req.session.user.id)) return res.status(403).json({ error: "no" });
   const data = readData();
   const list = Object.values(data.pastes || {})
     .map((p) => ({
@@ -347,27 +335,27 @@ app.get("/api/admin/pastes", ensureAuth, (req, res) => {
       views: p.views || 0,
       createdBy: p.createdBy,
       createdByName: p.createdByName,
+      // convenience fields for admin front-end
+      link: `/paste/${p.id}`,
+      content: p.text,
     }))
     .sort((a, b) => (b.views || 0) - (a.views || 0));
   return res.json(list);
 });
 
-// delete paste
+// delete paste (admin)
 app.delete("/api/admin/paste/:id", ensureAuth, (req, res) => {
-  if (!isAdminId(req.session.user.id))
-    return res.status(403).json({ error: "no" });
+  if (!isAdminId(req.session.user.id)) return res.status(403).json({ error: "no" });
   const data = readData();
-  if (!data.pastes[req.params.id])
-    return res.status(404).json({ error: "not found" });
+  if (!data.pastes[req.params.id]) return res.status(404).json({ error: "not found" });
   delete data.pastes[req.params.id];
   writeData(data);
   return res.json({ ok: true });
 });
 
-// list users
+// list users (admin)
 app.get("/api/users", ensureAuth, (req, res) => {
-  if (!isAdminId(req.session.user.id))
-    return res.status(403).json({ error: "no" });
+  if (!isAdminId(req.session.user.id)) return res.status(403).json({ error: "no" });
   const data = readData();
   const users = Object.values(data.users || {}).map((u) => ({
     id: u.id,
@@ -381,10 +369,9 @@ app.get("/api/users", ensureAuth, (req, res) => {
   return res.json(users);
 });
 
-// block/unblock user
+// block/unblock user (admin)
 app.post("/api/admin/block/:id", ensureAuth, (req, res) => {
-  if (!isAdminId(req.session.user.id))
-    return res.status(403).json({ error: "no" });
+  if (!isAdminId(req.session.user.id)) return res.status(403).json({ error: "no" });
   const target = req.params.id;
   const data = readData();
   if (!data.users[target]) return res.status(404).json({ error: "not found" });
@@ -393,14 +380,12 @@ app.post("/api/admin/block/:id", ensureAuth, (req, res) => {
   return res.json({ id: target, blocked: data.users[target].blocked });
 });
 
-// add uses
+// add uses (admin)
 app.post("/api/admin/adduses/:id", ensureAuth, (req, res) => {
-  if (!isAdminId(req.session.user.id))
-    return res.status(403).json({ error: "no" });
+  if (!isAdminId(req.session.user.id)) return res.status(403).json({ error: "no" });
   const id = req.params.id;
   const amount = parseInt(req.body.amount || 0);
-  if (!amount || amount <= 0)
-    return res.status(400).json({ error: "invalid amount" });
+  if (!amount || amount <= 0) return res.status(400).json({ error: "invalid amount" });
   const data = readData();
   data.users[id] = data.users[id] || {
     id,
@@ -414,14 +399,12 @@ app.post("/api/admin/adduses/:id", ensureAuth, (req, res) => {
   return res.json({ id, usesLeft: data.users[id].usesLeft });
 });
 
-// set role
+// set role (admin)
 app.post("/api/admin/role/:id", ensureAuth, (req, res) => {
-  if (!isAdminId(req.session.user.id))
-    return res.status(403).json({ error: "no" });
+  if (!isAdminId(req.session.user.id)) return res.status(403).json({ error: "no" });
   const id = req.params.id;
   const role = (req.body.role || "").toString();
-  if (!["Membro", "Basic", "Plus", "Premium"].includes(role))
-    return res.status(400).json({ error: "invalid role" });
+  if (!["Membro", "Basic", "Plus", "Premium"].includes(role)) return res.status(400).json({ error: "invalid role" });
   const data = readData();
   data.users[id] = data.users[id] || {
     id,
@@ -433,8 +416,7 @@ app.post("/api/admin/role/:id", ensureAuth, (req, res) => {
   data.users[id].roles = [role];
   const target = defaultUsesForRole(role);
   if (!isAdminId(id)) {
-    if (!data.users[id].usesLeft || data.users[id].usesLeft < target)
-      data.users[id].usesLeft = target;
+    if (!data.users[id].usesLeft || data.users[id].usesLeft < target) data.users[id].usesLeft = target;
   } else {
     data.users[id].usesLeft = Infinity;
   }
@@ -446,10 +428,9 @@ app.post("/api/admin/role/:id", ensureAuth, (req, res) => {
   });
 });
 
-// builder summary
+// builder summary (admin)
 app.get("/api/admin/builders", ensureAuth, (req, res) => {
-  if (!isAdminId(req.session.user.id))
-    return res.status(403).json({ error: "no" });
+  if (!isAdminId(req.session.user.id)) return res.status(403).json({ error: "no" });
   const data = readData();
   const byPlatform = {};
   const byGame = {};
