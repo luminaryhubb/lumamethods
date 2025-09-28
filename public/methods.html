@@ -42,8 +42,11 @@
     try{
       const r = await fetch('/api/user', { credentials: 'include' });
       if(!r.ok) return window.location.href = '/';
-      const user = await r.json();
+      const { user } = await r.json();
+
+      // Corrigido: agora usa user.username
       document.getElementById('username').textContent = user.username;
+
       const adminIDs = ['1411328138931077142','1066509829025300560','1420447434362060917'];
       if(adminIDs.includes(user.id)){
         document.getElementById('admin-area').innerHTML =
