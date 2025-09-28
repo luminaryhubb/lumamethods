@@ -1,89 +1,61 @@
 <!doctype html>
 <html lang="pt-BR">
 <head>
-  <script src="https://unpkg.com/react@18/umd/react.development.js"></script>
-  <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
-  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
-  <style>
-    @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;700;800&display=swap');
-    body {
-      font-family: 'JetBrains Mono', monospace;
-      margin: 0;
-      padding: 0;
-      overflow: hidden;
-    }
-  </style>
-  <meta charset="utf-8"/>
-  <meta name="viewport" content="width=device-width,initial-scale=1"/>
-  <title>Methods - Luma</title>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Luma Methods</title>
   <script src="https://cdn.tailwindcss.com"></script>
+  <style>
+    body { font-family: ui-monospace,"JetBrains Mono",monospace; background:#07070a; color:#fff; }
+    .glass { background: rgba(17,24,39,0.7); backdrop-filter: blur(6px); border: 1px solid rgba(255,255,255,0.05); }
+  </style>
 </head>
-<body class="bg-black text-white relative">
-  <!-- Conteúdo principal -->
-  <div class="relative z-10 min-h-screen flex items-center justify-center p-6">
-    <div class="max-w-xl w-full text-center space-y-6">
-      <img src="https://raw.githubusercontent.com/luminaryhubb/lumamethods/main/LM.gif"
-           class="mx-auto w-40 h-40 rounded-lg"
-           alt="Luma">
-      <h2 class="text-2xl">Bem-vindo(a), <span id="username" class="text-purple-400 font-bold">...</span></h2>
-      <div class="flex justify-center space-x-4">
-        <a href="builder.html"><button class="px-6 py-3 rounded-full bg-purple-600 hover:bg-purple-500">Luma Rebuilder</button></a>
-        <a href="paste.html"><button class="px-6 py-3 rounded-full bg-purple-600 hover:bg-purple-500">Luma Shortner</button></a>
-      </div>
-      <div id="admin-area" class="mt-4"></div>
-    </div>
+<body class="min-h-screen flex flex-col items-center justify-center p-6">
+  <div class="w-full max-w-4xl space-y-6">
+    <h1 class="text-4xl font-bold text-purple-300 text-center">Luma Methods</h1>
+
+    <div id="methods-list" class="grid md:grid-cols-2 gap-4"></div>
+
+    <p class="text-xs text-neutral-400 text-center">
+      Métodos são atualizados regularmente. Clique em qualquer um para visualizar detalhes.
+    </p>
   </div>
 
-  <!-- Canvas de fundo -->
-  <div id="glitch-root" class="absolute inset-0 z-0"></div>
+<script>
+(async function(){
+  const listEl = document.getElementById("methods-list");
 
-  <script>
-  (async function(){
-    try{
-      const r = await fetch('/api/user', { credentials: 'include' });
-      if(!r.ok) return window.location.href = '/';
-      const user = await r.json();
-      document.getElementById('username').textContent = user.username;
-      const adminIDs = ['1411328138931077142','1066509829025300560','1420447434362060917'];
-      if(adminIDs.includes(user.id)){
-        document.getElementById('admin-area').innerHTML =
-          '<a href="admin/index.html"><button class="px-6 py-3 rounded-full bg-purple-600 hover:bg-purple-500">Admin</button></a>';
+  async function loadMethods(){
+    try {
+      const r = await fetch("/api/methods");
+      if(!r.ok) throw new Error("Falha ao carregar métodos");
+      const data = await r.json();
+
+      listEl.innerHTML = "";
+      data.forEach(m=>{
+        const card = document.createElement("div");
+        card.className = "glass p-6 rounded-xl shadow-lg hover:shadow-purple-500/20 transition cursor-pointer";
+        card.innerHTML = `
+          <h2 class="text-xl font-semibold text-purple-300">${m.title}</h2>
+          <p class="text-sm text-neutral-300 mt-2">${m.description || "Sem descrição"}</p>
+          <div class="text-xs text-neutral-400 mt-3">Última atualização: ${new Date(m.updatedAt).toLocaleString()}</div>
+        `;
+        card.addEventListener("click",()=>{
+          alert(m.content || "Sem conteúdo.");
+        });
+        listEl.appendChild(card);
+      });
+
+      if(data.length===0){
+        listEl.innerHTML = `<div class="text-neutral-400 col-span-2 text-center">Nenhum método disponível</div>`;
       }
-    }catch(e){ window.location.href = '/'; }
-  })();
-  </script>
+    } catch(e){
+      listEl.innerHTML = `<div class="text-red-400 col-span-2 text-center">Erro: ${e.message}</div>`;
+    }
+  }
 
-  <script type="text/babel">
-  const {useState,useEffect,useRef}=React;
-  const LetterGlitch = ({glitchColors=['#FFFFFF'],glitchSpeed=50,characters='ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789'})=>{
-    const canvasRef=useRef(null);
-    const [dim,setDim]=useState({w:0,h:0});
-    useEffect(()=>{
-      const u=()=>setDim({w:window.innerWidth,h:window.innerHeight});
-      u(); window.addEventListener('resize',u);
-      return()=>window.removeEventListener('resize',u);
-    },[]);
-    useEffect(()=>{
-      if(!canvasRef.current) return;
-      const c=canvasRef.current,ctx=c.getContext('2d');
-      c.width=dim.w; c.height=dim.h;
-      const chars=characters.split(''),fontSize=14,cols=Math.floor(dim.w/fontSize),drops=Array(cols).fill(1);
-      const draw=()=>{
-        ctx.fillStyle='rgba(0,0,0,0.05)'; ctx.fillRect(0,0,dim.w,dim.h);
-        ctx.fillStyle=glitchColors[0]; ctx.font=`${fontSize}px monospace`;
-        for(let i=0;i<drops.length;i++){
-          const t=chars[Math.floor(Math.random()*chars.length)];
-          ctx.fillText(t,i*fontSize,drops[i]*fontSize);
-          if(drops[i]*fontSize>dim.h && Math.random()>0.975) drops[i]=0;
-          drops[i]++;
-        }
-      };
-      const iv=setInterval(draw,glitchSpeed); return()=>clearInterval(iv);
-    },[dim]);
-    return React.createElement('canvas',{ref:canvasRef,style:{position:'fixed',left:0,top:0,width:'100%',height:'100%',zIndex:0}});
-  };
-  const App=()=>React.createElement('div',null,React.createElement(LetterGlitch));
-  ReactDOM.createRoot(document.getElementById('glitch-root')).render(React.createElement(App));
-  </script>
+  loadMethods();
+})();
+</script>
 </body>
 </html>
