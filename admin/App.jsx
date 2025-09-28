@@ -27,7 +27,7 @@ function Sidebar({ page, setPage }) {
 
 // Dashboard
 function Dashboard() {
-  const [stats, setStats] = useState({ pastes: 0, views: 0, top: [] });
+  const [stats, setStats] = useState({ pastes: 0, views: 0, usersToday: 0 });
   useEffect(() => {
     fetch("/api/admin/stats")
       .then((r) => r.json())
@@ -48,13 +48,13 @@ function Dashboard() {
   );
 }
 
-// Builders (simples para teste)
+// Builders
 function Builders() {
   const [usesLeft, setUsesLeft] = useState(0);
   useEffect(() => {
     fetch("/api/user")
       .then((r) => r.json())
-      .then((j) => setUsesLeft(j.user?.usesLeft ?? 0));
+      .then((j) => setUsesLeft(j.usesLeft ?? 0));
   }, []);
   async function useBuilder() {
     const res = await fetch("/api/builder/use", { method: "POST" });
@@ -88,19 +88,47 @@ function Users() {
       .then((r) => r.json())
       .then((j) => setUsers(j));
   }, []);
+
+  async function toggleBlock(id) {
+    const res = await fetch(`/api/admin/block/${id}`, { method: "POST" });
+    if (res.ok) {
+      const updated = await res.json();
+      setUsers((prev) =>
+        prev.map((u) => (u.id === id ? { ...u, blocked: updated.blocked } : u))
+      );
+    }
+  }
+
   return (
     <div className="p-6 text-white">
       <h2 className="text-2xl mb-4">Users</h2>
       {users.map((u) => (
-        <div key={u.id} className="bg-neutral-800 p-3 rounded mb-2">
-          {u.name} ({u.id}) — Usos: {u.usesLeft}
+        <div
+          key={u.id}
+          className="bg-neutral-800 p-3 rounded mb-2 flex justify-between items-center"
+        >
+          <div>
+            {u.name} ({u.id}) — Usos: {u.usesLeft}{" "}
+            {u.blocked && <span className="text-red-400 ml-2">(Bloqueado)</span>}
+          </div>
+          <button
+            onClick={() => toggleBlock(u.id)}
+            className={
+              "px-3 py-1 rounded " +
+              (u.blocked
+                ? "bg-green-600 hover:bg-green-700"
+                : "bg-red-600 hover:bg-red-700")
+            }
+          >
+            {u.blocked ? "Desbloquear" : "Bloquear"}
+          </button>
         </div>
       ))}
     </div>
   );
 }
 
-// Config placeholder
+// Config
 function Config() {
   return (
     <div className="p-6 text-white">
@@ -110,7 +138,7 @@ function Config() {
   );
 }
 
-// Bloqueio de acesso
+// Not admin
 function NotAdmin() {
   return (
     <div className="h-screen w-screen flex items-center justify-center bg-black">
@@ -146,7 +174,11 @@ function App() {
   }, []);
 
   if (isAdmin === null) {
-    return <div className="h-screen flex items-center justify-center bg-black text-white">Carregando...</div>;
+    return (
+      <div className="h-screen flex items-center justify-center bg-black text-white">
+        Carregando...
+      </div>
+    );
   }
 
   if (!isAdmin) {
@@ -158,7 +190,9 @@ function App() {
       <Sidebar page={page} setPage={setPage} />
       <div className="flex-1 overflow-auto">
         {page === "Dashboard" && <Dashboard />}
-        {page === "Pastes" && <div className="p-6 text-white">Pastes page...</div>}
+        {page === "Pastes" && (
+          <div className="p-6 text-white">Pastes page...</div>
+        )}
         {page === "Builders" && <Builders />}
         {page === "Users" && <Users />}
         {page === "Config" && <Config />}
