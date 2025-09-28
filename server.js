@@ -199,9 +199,9 @@ app.post("/api/builder/use", ensureAuth, (req, res) => {
   const uid = req.session.user.id;
   const u = data.users[uid];
   if (!u) return res.status(404).json({ error: "User not found" });
-  if (u.blocked) return res.status(403).json({ error: "Blocked" });
+  if (u.blocked) return res.status(403).json({ error: "Você foi banido do Luma Methods - https://discord.gg/v2JdwRZktC" });
   if (!isAdminId(uid)) {
-    if (u.usesLeft <= 0) return res.status(403).json({ error: "No uses left" });
+    if (u.usesLeft <= 0) return res.status(403).json({ error: "Sem Usos Restantes -  Volte amanha!" });
     u.usesLeft -= 1;
   }
   data.builders = data.builders || [];
@@ -237,7 +237,7 @@ app.post("/api/create", ensureAuth, (req, res) => {
   if (!isAdminId(uid)) {
     if (u.usesLeft === undefined)
       u.usesLeft = defaultUsesForRole((u.roles && u.roles[0]) || null);
-    if (u.usesLeft <= 0) return res.status(403).json({ error: "No uses left" });
+    if (u.usesLeft <= 0) return res.status(403).json({ error: "Sem Usos Disponiveis - Volte Amanha" });
     u.usesLeft -= 1;
   }
 
