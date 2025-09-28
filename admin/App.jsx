@@ -48,13 +48,37 @@ function Dashboard() {
     days: [],
     usersTimeseries: [],
     topPastes: [],
+    rolesDistribution: { Membro: 0, Basic: 0, Plus: 0, Premium: 0 },
+    buildersByPlatform: {},
   });
 
   useEffect(() => {
-    fetch("/api/admin/stats")
-      .then((r) => r.json())
-      .then((j) => setStats(j))
-      .catch(() => {});
+    async function load() {
+      try {
+        const [s, b, u] = await Promise.all([
+          fetch("/api/admin/stats").then((r) => r.json()),
+          fetch("/api/admin/builders").then((r) => r.json()),
+          fetch("/api/users").then((r) => r.json()),
+        ]);
+
+        // calcular roles
+        const rolesDist = { Membro: 0, Basic: 0, Plus: 0, Premium: 0 };
+        u.forEach((usr) => {
+          (usr.roles || []).forEach((role) => {
+            if (rolesDist[role] !== undefined) rolesDist[role]++;
+          });
+        });
+
+        setStats({
+          ...s,
+          rolesDistribution: rolesDist,
+          buildersByPlatform: b.byPlatform || {},
+        });
+      } catch (e) {
+        console.error("Erro carregando dashboard", e);
+      }
+    }
+    load();
   }, []);
 
   return (
@@ -117,12 +141,14 @@ function Dashboard() {
       <DashboardCharts
         days={stats.days}
         usersTimeseries={stats.usersTimeseries}
+        rolesDistribution={stats.rolesDistribution}
+        buildersByPlatform={stats.buildersByPlatform}
       />
     </div>
   );
 }
 
-function DashboardCharts({ days, usersTimeseries }) {
+function DashboardCharts({ days, usersTimeseries, rolesDistribution, buildersByPlatform }) {
   useEffect(() => {
     // Chart de usuários
     const ctx = document.getElementById("chart-users");
@@ -143,30 +169,22 @@ function DashboardCharts({ days, usersTimeseries }) {
             },
           ],
         },
-        options: {
-          responsive: true,
-          plugins: { legend: { display: false } },
-        },
+        options: { responsive: true, plugins: { legend: { display: false } } },
       });
     }
 
-    // Chart de roles (mock de exemplo, backend pode alimentar)
+    // Chart de roles
     const ctxRoles = document.getElementById("chart-roles");
     if (ctxRoles) {
       if (window._chartRoles) window._chartRoles.destroy();
       window._chartRoles = new Chart(ctxRoles, {
         type: "doughnut",
         data: {
-          labels: ["Membro", "Basic", "Plus", "Premium"],
+          labels: Object.keys(rolesDistribution),
           datasets: [
             {
-              data: [70, 10, 15, 5],
-              backgroundColor: [
-                "#6b46c1",
-                "#805ad5",
-                "#9f7aea",
-                "#b794f4",
-              ],
+              data: Object.values(rolesDistribution),
+              backgroundColor: ["#6b46c1", "#805ad5", "#9f7aea", "#b794f4"],
             },
           ],
         },
@@ -174,28 +192,25 @@ function DashboardCharts({ days, usersTimeseries }) {
       });
     }
 
-    // Chart de builders por plataforma (mock)
+    // Chart de builders por plataforma
     const ctxBuilders = document.getElementById("chart-builders");
     if (ctxBuilders) {
       if (window._chartBuilders) window._chartBuilders.destroy();
       window._chartBuilders = new Chart(ctxBuilders, {
         type: "bar",
         data: {
-          labels: ["Roblox", "Discord", "Outros"],
+          labels: Object.keys(buildersByPlatform || {}),
           datasets: [
             {
-              data: [12, 8, 4],
+              data: Object.values(buildersByPlatform || {}),
               backgroundColor: "#9f7aea",
             },
           ],
         },
-        options: {
-          responsive: true,
-          plugins: { legend: { display: false } },
-        },
+        options: { responsive: true, plugins: { legend: { display: false } } },
       });
     }
-  }, [days, usersTimeseries]);
+  }, [days, usersTimeseries, rolesDistribution, buildersByPlatform]);
 
   return null;
 }
