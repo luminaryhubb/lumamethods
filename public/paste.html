@@ -87,6 +87,14 @@
 
 <script>
 (async function(){
+  // 🔒 Proteção de login
+  try {
+    const r = await fetch('/api/user', { credentials: 'include' });
+    if (!r.ok) return window.location.href = '/';
+    const { user } = await r.json();
+    if (!user) return window.location.href = '/';
+  } catch(e){ window.location.href = '/'; }
+
   // Elements
   const step1El = document.getElementById('step-1');
   const step2El = document.getElementById('step-2');
@@ -126,21 +134,17 @@
     errorBox.classList.add('hidden');
   }
 
-  // fetch user uses
   async function refreshUser(){
     try {
       const r = await fetch('/api/user', { credentials: 'include' });
       if(!r.ok){ usesLeftEl.textContent = '—'; return; }
       const u = await r.json();
-      // u expected to be object { usesLeft: number } or user object
-      const uses = (u && (u.usesLeft ?? u.usesleft ?? u.uses)) ?? (u && u.user && (u.user.usesLeft ?? u.user.uses));
+      const uses = (u && (u.usesLeft ?? u.uses)) ?? (u.user && u.user.usesLeft);
       usesLeftEl.textContent = uses === Infinity ? '∞' : (uses ?? '—');
-    } catch(e){
-      usesLeftEl.textContent = '—';
-    }
+    } catch(e){ usesLeftEl.textContent = '—'; }
   }
 
-  // Step transitions
+  // Navegação steps
   toStep2Btn.addEventListener('click', ()=>{
     if(!contentInput.value.trim()){ showError('Preencha o conteúdo antes de continuar.'); return; }
     setStep(2);
@@ -149,7 +153,6 @@
 
   toStep3Btn.addEventListener('click', ()=>{
     if(!passwordInput.value.trim()){ showError('Senha obrigatória.'); return; }
-    // update summary
     summaryContent.textContent = contentInput.value.trim();
     summaryPassword.textContent = '●'.repeat(Math.max(3,passwordInput.value.length));
     summaryRedirect.textContent = redirectInput.value.trim() || '—';
@@ -172,7 +175,7 @@
     errorBox.classList.remove('hidden');
   }
 
-  // Create paste
+  // Criar paste
   startCreateBtn.addEventListener('click', async ()=>{
     startCreateBtn.disabled = true;
     startCreateBtn.textContent = 'Gerando...';
@@ -224,7 +227,6 @@
     }
   });
 
-  // init
   await refreshUser();
   setStep(1);
 })();
