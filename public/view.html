@@ -1,82 +1,130 @@
-<!doctype html>
+<!DOCTYPE html>
 <html lang="pt-BR">
 <head>
-  <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>Ver Paste</title>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Luma Paste</title>
   <script src="https://cdn.tailwindcss.com"></script>
-  <style>
-    body { background:#0a0a0f; color:#fff; font-family: ui-monospace, monospace; }
-    .glass { background: rgba(20,20,30,0.6); backdrop-filter: blur(6px); border: 1px solid rgba(255,255,255,0.08); }
-  </style>
 </head>
-<body class="min-h-screen flex items-center justify-center p-6">
-  <div class="w-full max-w-lg glass p-6 rounded-2xl space-y-6">
-    <h1 class="text-2xl font-bold text-purple-300">🔒 Paste Protegido</h1>
+<body class="bg-neutral-950 text-white min-h-screen flex items-center justify-center p-6">
+  <div class="w-full max-w-2xl bg-neutral-900 rounded-xl shadow-lg p-6 space-y-4">
+    <h1 class="text-2xl font-bold text-purple-400">🔒 Paste Protegido</h1>
+    <p class="text-neutral-400 text-sm">Insira a senha para visualizar o conteúdo.</p>
 
-    <div>
-      <label class="block text-sm text-neutral-300 mb-2">Digite a senha</label>
-      <input id="password" type="password"
-        class="w-full p-3 rounded bg-neutral-900 border border-neutral-800 text-sm"
-        placeholder="Senha do paste" />
+    <!-- Formulário de senha -->
+    <div id="password-section" class="space-y-3">
+      <input
+        type="password"
+        id="password-input"
+        placeholder="Digite a senha"
+        class="w-full p-2 rounded bg-neutral-800 border border-neutral-700 focus:outline-none focus:ring-2 focus:ring-purple-500"
+      />
+      <button
+        id="access-btn"
+        class="w-full bg-purple-600 hover:bg-purple-700 rounded p-2 font-semibold"
+      >
+        Acessar
+      </button>
     </div>
 
-    <button id="unlock" class="w-full px-4 py-3 rounded bg-purple-600 hover:bg-purple-500">
-      Desbloquear
-    </button>
+    <!-- Conteúdo do paste -->
+    <div id="content-section" class="hidden space-y-3">
+      <div class="flex justify-between items-center">
+        <h2 class="text-xl font-bold">Conteúdo do Paste</h2>
+        <span id="views" class="text-sm text-neutral-400"></span>
+      </div>
+      <pre
+        id="paste-text"
+        class="bg-neutral-800 p-4 rounded text-sm whitespace-pre-wrap overflow-x-auto"
+      ></pre>
 
-    <div id="error" class="text-red-400 text-sm hidden"></div>
+      <div class="flex justify-between items-center text-sm text-neutral-400">
+        <span id="author"></span>
+        <span id="created-at"></span>
+      </div>
 
-    <div id="content-box" class="hidden space-y-3">
-      <div class="text-sm text-neutral-400">Conteúdo:</div>
-      <pre id="paste-content" class="bg-neutral-900 p-3 rounded text-sm whitespace-pre-wrap"></pre>
-      <a id="redirect-link" href="#" target="_blank"
-        class="hidden px-4 py-2 bg-green-600 hover:bg-green-500 rounded inline-block text-center">
-        Ir para redirecionamento
-      </a>
+      <div id="redirect-section" class="hidden pt-2">
+        <a
+          id="redirect-link"
+          href="#"
+          target="_blank"
+          class="text-purple-400 hover:underline"
+        >
+          👉 Ir para link associado
+        </a>
+      </div>
     </div>
+
+    <!-- Erro -->
+    <div id="error" class="hidden text-red-400 font-semibold"></div>
   </div>
 
-<script>
-(async function(){
-  const unlockBtn = document.getElementById("unlock");
-  const pwdInput = document.getElementById("password");
-  const errorBox = document.getElementById("error");
-  const contentBox = document.getElementById("content-box");
-  const pasteContent = document.getElementById("paste-content");
-  const redirectLink = document.getElementById("redirect-link");
+  <script>
+    const pasteId = window.location.pathname.split("/").pop();
+    const accessBtn = document.getElementById("access-btn");
+    const passwordInput = document.getElementById("password-input");
+    const errorDiv = document.getElementById("error");
+    const contentSection = document.getElementById("content-section");
+    const passwordSection = document.getElementById("password-section");
+    const pasteText = document.getElementById("paste-text");
+    const viewsSpan = document.getElementById("views");
+    const authorSpan = document.getElementById("author");
+    const createdAtSpan = document.getElementById("created-at");
+    const redirectSection = document.getElementById("redirect-section");
+    const redirectLink = document.getElementById("redirect-link");
 
-  const pasteId = window.location.pathname.split("/").pop();
+    let pasteMeta = null;
 
-  unlockBtn.addEventListener("click", async ()=>{
-    errorBox.classList.add("hidden");
-    const pwd = pwdInput.value.trim();
-    if(!pwd){ errorBox.textContent = "Senha obrigatória."; errorBox.classList.remove("hidden"); return; }
-
-    try {
-      const res = await fetch("/api/view/" + pasteId, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ password: pwd })
-      });
-      const data = await res.json();
-      if(!res.ok){
-        errorBox.textContent = data.error || "Erro ao abrir paste";
-        errorBox.classList.remove("hidden");
-        return;
+    async function loadMeta() {
+      try {
+        const r = await fetch(`/api/paste/${pasteId}/data`);
+        if (!r.ok) throw new Error("Falha ao carregar metadados");
+        pasteMeta = await r.json();
+      } catch (err) {
+        errorDiv.textContent = "Erro: " + err.message;
+        errorDiv.classList.remove("hidden");
       }
-      pasteContent.textContent = data.text;
-      contentBox.classList.remove("hidden");
-      if(data.redirect){
-        redirectLink.href = data.redirect;
-        redirectLink.classList.remove("hidden");
-      }
-    } catch(e){
-      errorBox.textContent = "Erro de conexão.";
-      errorBox.classList.remove("hidden");
     }
-  });
-})();
-</script>
+
+    async function accessPaste() {
+      errorDiv.classList.add("hidden");
+      try {
+        const r = await fetch(`/api/paste/${pasteId}/access`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ password: passwordInput.value }),
+        });
+        const data = await r.json();
+        if (!r.ok) throw new Error(data.error || "Senha incorreta");
+
+        passwordSection.classList.add("hidden");
+        contentSection.classList.remove("hidden");
+
+        pasteText.textContent = data.text;
+        viewsSpan.textContent = `${(pasteMeta.views || 0) + 1} views`;
+        authorSpan.textContent = pasteMeta.createdByName
+          ? `Autor: ${pasteMeta.createdByName}`
+          : "";
+        createdAtSpan.textContent = pasteMeta.createdAt
+          ? `Criado em ${new Date(pasteMeta.createdAt).toLocaleString()}`
+          : "";
+
+        if (data.redirect) {
+          redirectSection.classList.remove("hidden");
+          redirectLink.href = data.redirect;
+        }
+      } catch (err) {
+        errorDiv.textContent = "Erro: " + err.message;
+        errorDiv.classList.remove("hidden");
+      }
+    }
+
+    accessBtn.addEventListener("click", accessPaste);
+    passwordInput.addEventListener("keydown", (e) => {
+      if (e.key === "Enter") accessPaste();
+    });
+
+    loadMeta();
+  </script>
 </body>
 </html>
