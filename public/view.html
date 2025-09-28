@@ -2,87 +2,69 @@
 <html lang="pt-BR">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-  <title>Luma Paste</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Visualizar Paste</title>
   <script src="https://cdn.tailwindcss.com"></script>
 </head>
-<body class="bg-neutral-950 text-white min-h-screen flex items-center justify-center p-6">
-  <div class="w-full max-w-2xl bg-neutral-900 rounded-xl shadow-lg p-6 space-y-4">
-    <h1 class="text-2xl font-bold text-purple-400">🔒 Paste Protegido</h1>
-    <p class="text-neutral-400 text-sm">Insira a senha para visualizar o conteúdo.</p>
+<body class="bg-neutral-950 text-white flex items-center justify-center min-h-screen">
+  <div class="bg-neutral-900 shadow-2xl rounded-2xl p-8 w-full max-w-2xl">
+    <h1 class="text-3xl font-bold text-purple-400 mb-6">🔒 Paste Protegido</h1>
 
-    <!-- Formulário de senha -->
-    <div id="password-section" class="space-y-3">
+    <!-- Área de senha -->
+    <div id="password-section" class="space-y-4">
+      <p class="text-neutral-300">Digite a senha para acessar o conteúdo:</p>
       <input
         type="password"
-        id="password-input"
-        placeholder="Digite a senha"
-        class="w-full p-2 rounded bg-neutral-800 border border-neutral-700 focus:outline-none focus:ring-2 focus:ring-purple-500"
+        id="password"
+        placeholder="Senha"
+        class="w-full px-4 py-2 rounded bg-neutral-800 text-white focus:outline-none focus:ring-2 focus:ring-purple-600"
       />
       <button
-        id="access-btn"
-        class="w-full bg-purple-600 hover:bg-purple-700 rounded p-2 font-semibold"
+        onclick="accessPaste()"
+        class="w-full bg-purple-600 hover:bg-purple-700 px-4 py-2 rounded font-bold transition"
       >
         Acessar
       </button>
+      <div id="error" class="hidden text-red-400 mt-2"></div>
     </div>
 
     <!-- Conteúdo do paste -->
-    <div id="content-section" class="hidden space-y-3">
-      <div class="flex justify-between items-center">
-        <h2 class="text-xl font-bold">Conteúdo do Paste</h2>
-        <span id="views" class="text-sm text-neutral-400"></span>
-      </div>
-      <pre
-        id="paste-text"
-        class="bg-neutral-800 p-4 rounded text-sm whitespace-pre-wrap overflow-x-auto"
-      ></pre>
+    <div id="content-section" class="hidden mt-6 space-y-4">
+      <h2 class="text-2xl font-semibold text-purple-300">📄 Conteúdo</h2>
+      <pre id="paste-text" class="bg-neutral-800 p-4 rounded text-sm whitespace-pre-wrap"></pre>
 
-      <div class="flex justify-between items-center text-sm text-neutral-400">
+      <div class="flex justify-between text-sm text-neutral-400">
+        <span id="views"></span>
         <span id="author"></span>
-        <span id="created-at"></span>
       </div>
-
-      <div id="redirect-section" class="hidden pt-2">
-        <a
-          id="redirect-link"
-          href="#"
-          target="_blank"
-          class="text-purple-400 hover:underline"
-        >
-          👉 Ir para link associado
-        </a>
-      </div>
+      <div id="created-at" class="text-xs text-neutral-500"></div>
     </div>
-
-    <!-- Erro -->
-    <div id="error" class="hidden text-red-400 font-semibold"></div>
   </div>
 
   <script>
-    const pasteId = window.location.pathname.split("/").pop();
-    const accessBtn = document.getElementById("access-btn");
-    const passwordInput = document.getElementById("password-input");
+    const params = new URLSearchParams(window.location.search);
+    const pasteId = params.get("id");
+
+    const passwordInput = document.getElementById("password");
     const errorDiv = document.getElementById("error");
-    const contentSection = document.getElementById("content-section");
     const passwordSection = document.getElementById("password-section");
+    const contentSection = document.getElementById("content-section");
     const pasteText = document.getElementById("paste-text");
     const viewsSpan = document.getElementById("views");
     const authorSpan = document.getElementById("author");
     const createdAtSpan = document.getElementById("created-at");
-    const redirectSection = document.getElementById("redirect-section");
-    const redirectLink = document.getElementById("redirect-link");
 
-    let pasteMeta = null;
+    let pasteMeta = {};
 
-    async function loadMeta() {
+    async function loadPasteMeta() {
       try {
-        const r = await fetch(`/api/paste/${pasteId}/data`);
-        if (!r.ok) throw new Error("Falha ao carregar metadados");
+        const r = await fetch(`/api/paste/${pasteId}`);
+        if (!r.ok) throw new Error("Paste não encontrado");
         pasteMeta = await r.json();
       } catch (err) {
         errorDiv.textContent = "Erro: " + err.message;
         errorDiv.classList.remove("hidden");
+        passwordSection.classList.add("hidden");
       }
     }
 
@@ -97,6 +79,12 @@
         const data = await r.json();
         if (!r.ok) throw new Error(data.error || "Senha incorreta");
 
+        // 🚀 Redireciona se o paste tiver redirect
+        if (data.redirect) {
+          window.location.href = data.redirect;
+          return;
+        }
+
         passwordSection.classList.add("hidden");
         contentSection.classList.remove("hidden");
 
@@ -108,23 +96,13 @@
         createdAtSpan.textContent = pasteMeta.createdAt
           ? `Criado em ${new Date(pasteMeta.createdAt).toLocaleString()}`
           : "";
-
-        if (data.redirect) {
-          redirectSection.classList.remove("hidden");
-          redirectLink.href = data.redirect;
-        }
       } catch (err) {
         errorDiv.textContent = "Erro: " + err.message;
         errorDiv.classList.remove("hidden");
       }
     }
 
-    accessBtn.addEventListener("click", accessPaste);
-    passwordInput.addEventListener("keydown", (e) => {
-      if (e.key === "Enter") accessPaste();
-    });
-
-    loadMeta();
+    loadPasteMeta();
   </script>
 </body>
 </html>
