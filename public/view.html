@@ -3,106 +3,94 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Visualizar Paste</title>
+  <title>Paste Viewer</title>
   <script src="https://cdn.tailwindcss.com"></script>
 </head>
-<body class="bg-neutral-950 text-white flex items-center justify-center min-h-screen">
-  <div class="bg-neutral-900 shadow-2xl rounded-2xl p-8 w-full max-w-2xl">
-    <h1 class="text-3xl font-bold text-purple-400 mb-6">🔒 Paste Protegido</h1>
+<body class="bg-black text-white flex justify-center items-center min-h-screen">
+  <div class="bg-neutral-900 p-6 rounded-2xl w-full max-w-2xl shadow-lg">
+    <h1 id="title" class="text-2xl font-bold mb-4">Carregando...</h1>
 
-    <!-- Área de senha -->
-    <div id="password-section" class="space-y-4">
-      <p class="text-neutral-300">Digite a senha para acessar o conteúdo:</p>
+    <!-- Conteúdo do paste -->
+    <pre id="pasteContent" class="hidden bg-neutral-800 p-4 rounded-lg whitespace-pre-wrap text-sm"></pre>
+
+    <!-- Form de senha -->
+    <div id="passwordForm" class="hidden flex flex-col gap-3">
+      <p class="text-lg font-semibold">🔒 Paste Protegido</p>
       <input
         type="password"
-        id="password"
-        placeholder="Senha"
-        class="w-full px-4 py-2 rounded bg-neutral-800 text-white focus:outline-none focus:ring-2 focus:ring-purple-600"
+        id="passwordInput"
+        placeholder="Digite a senha"
+        class="p-2 rounded-lg bg-neutral-800 border border-neutral-700 focus:outline-none"
       />
       <button
         onclick="accessPaste()"
-        class="w-full bg-purple-600 hover:bg-purple-700 px-4 py-2 rounded font-bold transition"
+        class="bg-purple-600 hover:bg-purple-700 text-white px-4 py-2 rounded-lg font-semibold"
       >
         Acessar
       </button>
-      <div id="error" class="hidden text-red-400 mt-2"></div>
-    </div>
-
-    <!-- Conteúdo do paste -->
-    <div id="content-section" class="hidden mt-6 space-y-4">
-      <h2 class="text-2xl font-semibold text-purple-300">📄 Conteúdo</h2>
-      <pre id="paste-text" class="bg-neutral-800 p-4 rounded text-sm whitespace-pre-wrap"></pre>
-
-      <div class="flex justify-between text-sm text-neutral-400">
-        <span id="views"></span>
-        <span id="author"></span>
-      </div>
-      <div id="created-at" class="text-xs text-neutral-500"></div>
+      <p id="errorMsg" class="text-red-500 text-sm hidden"></p>
     </div>
   </div>
 
   <script>
-    const params = new URLSearchParams(window.location.search);
-    const pasteId = params.get("id");
+    const pasteId = window.location.pathname.split("/").pop();
+    let pasteMeta = null;
 
-    const passwordInput = document.getElementById("password");
-    const errorDiv = document.getElementById("error");
-    const passwordSection = document.getElementById("password-section");
-    const contentSection = document.getElementById("content-section");
-    const pasteText = document.getElementById("paste-text");
-    const viewsSpan = document.getElementById("views");
-    const authorSpan = document.getElementById("author");
-    const createdAtSpan = document.getElementById("created-at");
+    async function loadMeta() {
+      const res = await fetch(`/api/paste/${pasteId}/data`);
+      if (!res.ok) {
+        document.getElementById("title").innerText = "Paste não encontrado";
+        return;
+      }
+      pasteMeta = await res.json();
 
-    let pasteMeta = {};
+      if (pasteMeta.redirect) {
+        window.location.href = pasteMeta.redirect;
+        return;
+      }
 
-    async function loadPasteMeta() {
-      try {
-        const r = await fetch(`/api/paste/${pasteId}`);
-        if (!r.ok) throw new Error("Paste não encontrado");
-        pasteMeta = await r.json();
-      } catch (err) {
-        errorDiv.textContent = "Erro: " + err.message;
-        errorDiv.classList.remove("hidden");
-        passwordSection.classList.add("hidden");
+      if (pasteMeta) {
+        if (pasteMeta.password) {
+          document.getElementById("title").innerText = "Paste Protegido";
+          document.getElementById("passwordForm").classList.remove("hidden");
+        } else {
+          // pegar conteúdo direto sem senha
+          const res2 = await fetch(`/api/paste/${pasteId}/access`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ password: "" }),
+          });
+          const data = await res2.json();
+          if (data.text) showPaste(data.text);
+        }
       }
     }
 
     async function accessPaste() {
-      errorDiv.classList.add("hidden");
-      try {
-        const r = await fetch(`/api/paste/${pasteId}/access`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ password: passwordInput.value }),
-        });
-        const data = await r.json();
-        if (!r.ok) throw new Error(data.error || "Senha incorreta");
-
-        // 🚀 Redireciona se o paste tiver redirect
-        if (data.redirect) {
-          window.location.href = data.redirect;
-          return;
-        }
-
-        passwordSection.classList.add("hidden");
-        contentSection.classList.remove("hidden");
-
-        pasteText.textContent = data.text;
-        viewsSpan.textContent = `${(pasteMeta.views || 0) + 1} views`;
-        authorSpan.textContent = pasteMeta.createdByName
-          ? `Autor: ${pasteMeta.createdByName}`
-          : "";
-        createdAtSpan.textContent = pasteMeta.createdAt
-          ? `Criado em ${new Date(pasteMeta.createdAt).toLocaleString()}`
-          : "";
-      } catch (err) {
-        errorDiv.textContent = "Erro: " + err.message;
-        errorDiv.classList.remove("hidden");
+      const pass = document.getElementById("passwordInput").value.trim();
+      const res = await fetch(`/api/paste/${pasteId}/access`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ password: pass }),
+      });
+      const data = await res.json();
+      if (data.error) {
+        document.getElementById("errorMsg").innerText = data.error;
+        document.getElementById("errorMsg").classList.remove("hidden");
+      } else {
+        showPaste(data.text);
       }
     }
 
-    loadPasteMeta();
+    function showPaste(text) {
+      document.getElementById("title").innerText = "Conteúdo do Paste";
+      document.getElementById("passwordForm").classList.add("hidden");
+      const pre = document.getElementById("pasteContent");
+      pre.innerText = text;
+      pre.classList.remove("hidden");
+    }
+
+    loadMeta();
   </script>
 </body>
 </html>
