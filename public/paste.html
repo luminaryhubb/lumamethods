@@ -1,89 +1,233 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="pt-BR">
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Criar Paste</title>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Luma Paste — Stepper</title>
   <script src="https://cdn.tailwindcss.com"></script>
+  <style>
+    body { font-family: ui-monospace, "JetBrains Mono", monospace; background:#07070a; color:#fff; }
+    .step-active { background: linear-gradient(90deg,#6d28d9,#a78bfa); color: white; }
+    .step-inactive { background: rgba(255,255,255,0.03); color: #cbd5e1; }
+    .glass { background: rgba(17,24,39,0.6); backdrop-filter: blur(6px); border: 1px solid rgba(255,255,255,0.03); }
+  </style>
 </head>
-<body class="bg-gray-900 text-white min-h-screen flex flex-col items-center justify-center p-6">
-  <div class="w-full max-w-lg bg-gray-800 rounded-xl shadow-lg p-6">
-    <h1 class="text-2xl font-bold text-center mb-4">Criar Paste</h1>
+<body class="min-h-screen flex items-center justify-center p-6">
+  <div class="w-full max-w-2xl space-y-6">
 
-    <!-- Form -->
-    <form id="pasteForm" class="space-y-4">
-      <!-- Conteúdo -->
-      <div>
-        <label class="block mb-1 font-medium">Conteúdo</label>
-        <textarea id="text" class="w-full p-2 rounded bg-gray-700 text-white" rows="5" placeholder="Digite seu texto aqui..." required></textarea>
-      </div>
-
-      <!-- Senha -->
-      <div>
-        <label class="block mb-1 font-medium">Senha</label>
-        <input id="password" type="password" class="w-full p-2 rounded bg-gray-700 text-white" placeholder="Digite uma senha" required />
-      </div>
-
-      <!-- Redirecionamento -->
-      <div>
-        <label class="block mb-1 font-medium">URL de Redirecionamento (opcional)</label>
-        <input id="redirect" type="url" class="w-full p-2 rounded bg-gray-700 text-white" placeholder="https://exemplo.com" />
-      </div>
-
-      <!-- Botão -->
-      <button type="submit" class="w-full bg-blue-600 hover:bg-blue-700 p-2 rounded font-bold">
-        Gerar Paste
-      </button>
-    </form>
-
-    <!-- Resultado -->
-    <div id="result" class="mt-6 hidden text-center">
-      <p class="mb-2">✅ Paste criado com sucesso!</p>
-      <input id="pasteLink" readonly class="w-full p-2 rounded bg-gray-700 text-white text-center" />
-      <button onclick="copyLink()" class="mt-2 bg-green-600 hover:bg-green-700 px-4 py-2 rounded">
-        Copiar Link
-      </button>
+    <div class="flex items-center justify-between">
+      <h1 class="text-3xl font-bold text-purple-300">Luma Paste</h1>
+      <div id="uses-box" class="text-sm text-neutral-300">Usos restantes: <span id="uses-left">—</span></div>
     </div>
+
+    <div class="glass p-6 rounded-2xl shadow-xl">
+      <!-- Stepper header -->
+      <div class="flex items-center gap-3 mb-6">
+        <div id="step-1" class="px-3 py-2 rounded-md step-active">1. Conteúdo</div>
+        <div class="h-0.5 bg-white/5 flex-1"></div>
+        <div id="step-2" class="px-3 py-2 rounded-md step-inactive">2. Senha & Redirect</div>
+        <div class="h-0.5 bg-white/5 flex-1"></div>
+        <div id="step-3" class="px-3 py-2 rounded-md step-inactive">3. Gerar</div>
+      </div>
+
+      <!-- Pane 1: Conteúdo -->
+      <div id="pane-1">
+        <label class="block text-sm text-neutral-300 mb-2">Conteúdo (obrigatório)</label>
+        <textarea id="content" rows="6" class="w-full p-3 rounded bg-neutral-900 border border-neutral-800 text-sm" placeholder="Digite o conteúdo do paste..."></textarea>
+
+        <div class="mt-6 flex justify-end gap-2">
+          <button id="to-step-2" class="px-4 py-2 rounded bg-purple-600 hover:bg-purple-500">Próximo</button>
+        </div>
+      </div>
+
+      <!-- Pane 2: Senha & Redirect -->
+      <div id="pane-2" class="hidden">
+        <label class="block text-sm text-neutral-300 mb-2">Senha (obrigatório)</label>
+        <input id="password" type="password" class="w-full p-3 rounded bg-neutral-900 border border-neutral-800 text-sm" placeholder="Escolha uma senha para proteger o paste" />
+
+        <label class="block text-sm text-neutral-300 mt-4 mb-2">Redirecionamento (opcional)</label>
+        <input id="redirect" type="url" class="w-full p-3 rounded bg-neutral-900 border border-neutral-800 text-sm" placeholder="https://exemplo.com (opcional)" />
+
+        <div class="mt-6 flex justify-between">
+          <button id="back-step-1" class="px-4 py-2 rounded bg-neutral-700 hover:bg-neutral-600">Voltar</button>
+          <button id="to-step-3" class="px-4 py-2 rounded bg-purple-600 hover:bg-purple-500">Próximo</button>
+        </div>
+      </div>
+
+      <!-- Pane 3: Gerar / Resultado -->
+      <div id="pane-3" class="hidden">
+        <div id="summary" class="space-y-3 text-sm text-neutral-300">
+          <div><strong>Conteúdo:</strong></div>
+          <div id="summary-content" class="whitespace-pre-wrap bg-neutral-900 p-3 rounded text-sm"></div>
+          <div class="pt-2"><strong>Senha:</strong> <span id="summary-password">●●●●●</span></div>
+          <div><strong>Redirecionamento:</strong> <span id="summary-redirect">—</span></div>
+        </div>
+
+        <div class="mt-4 flex gap-3">
+          <button id="start-create" class="px-4 py-3 rounded bg-green-600 hover:bg-green-500 flex-1">Gerar Paste (gasta 1 uso)</button>
+          <button id="copy-output" class="px-4 py-3 rounded bg-purple-600 hover:bg-purple-500 hidden">Copiar</button>
+        </div>
+
+        <div id="output-area" class="mt-4 p-3 rounded bg-neutral-900 border border-neutral-800 hidden">
+          <label class="text-xs text-neutral-400">Link gerado:</label>
+          <input id="generated-output" readonly class="w-full mt-2 p-2 bg-transparent outline-none text-sm" />
+        </div>
+
+        <div class="mt-6 flex justify-between">
+          <button id="back-step-2" class="px-4 py-2 rounded bg-neutral-700 hover:bg-neutral-600">Voltar</button>
+          <button id="reset-all" class="px-4 py-2 rounded bg-red-600 hover:bg-red-500">Resetar</button>
+        </div>
+      </div>
+
+      <div id="error-box" class="mt-4 text-sm text-red-400 hidden"></div>
+    </div>
+
+    <p class="text-xs text-neutral-400">Observação: cada usuário tem <strong>3 usos por dia</strong>. Admins têm usos ilimitados. Usos resetam às 00:00 (servidor).</p>
   </div>
 
-  <script>
-    const form = document.getElementById("pasteForm");
-    const resultDiv = document.getElementById("result");
-    const pasteLink = document.getElementById("pasteLink");
+<script>
+(async function(){
+  // Elements
+  const step1El = document.getElementById('step-1');
+  const step2El = document.getElementById('step-2');
+  const step3El = document.getElementById('step-3');
+  const pane1 = document.getElementById('pane-1');
+  const pane2 = document.getElementById('pane-2');
+  const pane3 = document.getElementById('pane-3');
+  const toStep2Btn = document.getElementById('to-step-2');
+  const backStep1Btn = document.getElementById('back-step-1');
+  const toStep3Btn = document.getElementById('to-step-3');
+  const backStep2Btn = document.getElementById('back-step-2');
+  const resetAllBtn = document.getElementById('reset-all');
+  const startCreateBtn = document.getElementById('start-create');
+  const copyBtn = document.getElementById('copy-output');
+  const outputArea = document.getElementById('output-area');
+  const generatedOutput = document.getElementById('generated-output');
+  const summaryContent = document.getElementById('summary-content');
+  const summaryPassword = document.getElementById('summary-password');
+  const summaryRedirect = document.getElementById('summary-redirect');
+  const errorBox = document.getElementById('error-box');
+  const usesLeftEl = document.getElementById('uses-left');
 
-    form.addEventListener("submit", async (e) => {
-      e.preventDefault();
+  // Inputs
+  const contentInput = document.getElementById('content');
+  const passwordInput = document.getElementById('password');
+  const redirectInput = document.getElementById('redirect');
 
-      const text = document.getElementById("text").value.trim();
-      const password = document.getElementById("password").value.trim();
-      const redirect = document.getElementById("redirect").value.trim();
+  // State
+  let generatedLink = '';
+  function setStep(n){
+    step1El.className = n===1 ? 'px-3 py-2 rounded-md step-active' : 'px-3 py-2 rounded-md step-inactive';
+    step2El.className = n===2 ? 'px-3 py-2 rounded-md step-active' : 'px-3 py-2 rounded-md step-inactive';
+    step3El.className = n===3 ? 'px-3 py-2 rounded-md step-active' : 'px-3 py-2 rounded-md step-inactive';
+    pane1.classList.toggle('hidden', n!==1);
+    pane2.classList.toggle('hidden', n!==2);
+    pane3.classList.toggle('hidden', n!==3);
+    errorBox.classList.add('hidden');
+  }
 
-      try {
-        const res = await fetch("/api/create", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ text, password, redirect })
-        });
-
-        const data = await res.json();
-
-        if (data.error) {
-          alert("Erro: " + data.error);
-        } else {
-          pasteLink.value = window.location.origin + "/paste/" + data.id;
-          resultDiv.classList.remove("hidden");
-        }
-      } catch (err) {
-        alert("Erro ao criar paste!");
-        console.error(err);
-      }
-    });
-
-    function copyLink() {
-      pasteLink.select();
-      document.execCommand("copy");
-      alert("Link copiado!");
+  // fetch user uses
+  async function refreshUser(){
+    try {
+      const r = await fetch('/api/user', { credentials: 'include' });
+      if(!r.ok){ usesLeftEl.textContent = '—'; return; }
+      const u = await r.json();
+      // u expected to be object { usesLeft: number } or user object
+      const uses = (u && (u.usesLeft ?? u.usesleft ?? u.uses)) ?? (u && u.user && (u.user.usesLeft ?? u.user.uses));
+      usesLeftEl.textContent = uses === Infinity ? '∞' : (uses ?? '—');
+    } catch(e){
+      usesLeftEl.textContent = '—';
     }
-  </script>
+  }
+
+  // Step transitions
+  toStep2Btn.addEventListener('click', ()=>{
+    if(!contentInput.value.trim()){ showError('Preencha o conteúdo antes de continuar.'); return; }
+    setStep(2);
+  });
+  backStep1Btn.addEventListener('click', ()=> setStep(1));
+
+  toStep3Btn.addEventListener('click', ()=>{
+    if(!passwordInput.value.trim()){ showError('Senha obrigatória.'); return; }
+    // update summary
+    summaryContent.textContent = contentInput.value.trim();
+    summaryPassword.textContent = '●'.repeat(Math.max(3,passwordInput.value.length));
+    summaryRedirect.textContent = redirectInput.value.trim() || '—';
+    setStep(3);
+  });
+  backStep2Btn.addEventListener('click', ()=> setStep(2));
+
+  resetAllBtn.addEventListener('click', ()=>{
+    contentInput.value = '';
+    passwordInput.value = '';
+    redirectInput.value = '';
+    generatedLink = '';
+    outputArea.classList.add('hidden');
+    copyBtn.classList.add('hidden');
+    setStep(1);
+  });
+
+  function showError(msg){
+    errorBox.textContent = msg;
+    errorBox.classList.remove('hidden');
+  }
+
+  // Create paste
+  startCreateBtn.addEventListener('click', async ()=>{
+    startCreateBtn.disabled = true;
+    startCreateBtn.textContent = 'Gerando...';
+    errorBox.classList.add('hidden');
+
+    const payload = {
+      text: contentInput.value.trim(),
+      password: passwordInput.value.trim(),
+      redirect: redirectInput.value.trim() || null
+    };
+
+    try {
+      const res = await fetch('/api/create', {
+        method: 'POST',
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      });
+
+      const data = await res.json().catch(()=>({ error: 'Resposta inválida' }));
+      if (!res.ok) {
+        showError(data.error || 'Erro ao criar paste');
+        await refreshUser();
+        return;
+      }
+
+      generatedLink = window.location.origin + (data.link || `/paste/${data.id}`);
+      generatedOutput.value = generatedLink;
+      outputArea.classList.remove('hidden');
+      copyBtn.classList.remove('hidden');
+      await refreshUser();
+    } catch (e) {
+      console.error(e);
+      showError('Erro de conexão ao criar paste.');
+    } finally {
+      startCreateBtn.disabled = false;
+      startCreateBtn.textContent = 'Gerar Paste (gasta 1 uso)';
+    }
+  });
+
+  copyBtn.addEventListener('click', async ()=>{
+    if(!generatedLink) return;
+    try {
+      await navigator.clipboard.writeText(generatedLink);
+      copyBtn.textContent = 'Copiado ✅';
+      setTimeout(()=> copyBtn.textContent = 'Copiar', 1400);
+    } catch(e){
+      showError('Não foi possível copiar automaticamente.');
+    }
+  });
+
+  // init
+  await refreshUser();
+  setStep(1);
+})();
+</script>
 </body>
 </html>
